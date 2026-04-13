@@ -1,13 +1,11 @@
 use crate::helpers::*;
 
-fn client() -> reqwest::Client { authed_client() }
-
 #[tokio::test]
 async fn create_lot_and_list() {
     let pool = setup_pool();
     let seed = seed_users(&pool);
-    let c = client();
-    login_as(&c, "clerk").await;
+    let (session, _) = login_as(&authed_client(), "clerk").await;
+    let c = bearer_client(&session);
 
     let resp = c.post(&format!("{}/api/inventory/lots", base_url()))
         .json(&serde_json::json!({
@@ -32,8 +30,8 @@ async fn create_lot_and_list() {
 async fn reserve_success() {
     let pool = setup_pool();
     let seed = seed_users(&pool);
-    let c = client();
-    login_as(&c, "clerk").await;
+    let (session, _) = login_as(&authed_client(), "clerk").await;
+    let c = bearer_client(&session);
 
     let resp = c.post(&format!("{}/api/inventory/lots", base_url()))
         .json(&serde_json::json!({
@@ -61,8 +59,8 @@ async fn reserve_success() {
 async fn over_reservation_returns_409() {
     let pool = setup_pool();
     let seed = seed_users(&pool);
-    let c = client();
-    login_as(&c, "clerk").await;
+    let (session, _) = login_as(&authed_client(), "clerk").await;
+    let c = bearer_client(&session);
 
     let resp = c.post(&format!("{}/api/inventory/lots", base_url()))
         .json(&serde_json::json!({
@@ -87,8 +85,8 @@ async fn over_reservation_returns_409() {
 async fn transaction_recorded() {
     let pool = setup_pool();
     let seed = seed_users(&pool);
-    let c = client();
-    login_as(&c, "clerk").await;
+    let (session, _) = login_as(&authed_client(), "clerk").await;
+    let c = bearer_client(&session);
 
     let resp = c.post(&format!("{}/api/inventory/lots", base_url()))
         .json(&serde_json::json!({
@@ -121,8 +119,8 @@ async fn transaction_recorded() {
 async fn audit_print_returns_html() {
     let pool = setup_pool();
     let seed = seed_users(&pool);
-    let c = client();
-    login_as(&c, "clerk").await;
+    let (session, _) = login_as(&authed_client(), "clerk").await;
+    let c = bearer_client(&session);
 
     let resp = c.post(&format!("{}/api/inventory/lots", base_url()))
         .json(&serde_json::json!({
@@ -150,8 +148,8 @@ async fn audit_print_returns_html() {
 async fn near_expiry_filter() {
     let pool = setup_pool();
     let seed = seed_users(&pool);
-    let c = client();
-    login_as(&c, "clerk").await;
+    let (session, _) = login_as(&authed_client(), "clerk").await;
+    let c = bearer_client(&session);
 
     // Create a lot expiring in 10 days
     let expires = (chrono::Utc::now() + chrono::Duration::days(10)).format("%Y-%m-%d").to_string();

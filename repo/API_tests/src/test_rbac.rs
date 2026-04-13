@@ -1,13 +1,11 @@
 use crate::helpers::*;
 
-fn client() -> reqwest::Client { authed_client() }
-
 #[tokio::test]
 async fn clinician_cannot_create_lodging() {
     let pool = setup_pool();
     let _seed = seed_users(&pool);
-    let c = client();
-    login_as(&c, "clinician").await;
+    let (session, _) = login_as(&authed_client(), "clinician").await;
+    let c = bearer_client(&session);
 
     let resp = c.post(&format!("{}/api/lodgings", base_url()))
         .json(&serde_json::json!({"name": "Test", "amenities": []}))
@@ -19,8 +17,8 @@ async fn clinician_cannot_create_lodging() {
 async fn admin_can_create_resource() {
     let pool = setup_pool();
     let _seed = seed_users(&pool);
-    let c = client();
-    login_as(&c, "admin").await;
+    let (session, _) = login_as(&authed_client(), "admin").await;
+    let c = bearer_client(&session);
 
     let resp = c.post(&format!("{}/api/resources", base_url()))
         .json(&serde_json::json!({
@@ -38,8 +36,8 @@ async fn admin_can_create_resource() {
 async fn inventory_clerk_cannot_access_resources() {
     let pool = setup_pool();
     let _seed = seed_users(&pool);
-    let c = client();
-    login_as(&c, "clerk").await;
+    let (session, _) = login_as(&authed_client(), "clerk").await;
+    let c = bearer_client(&session);
 
     // InventoryClerk is not in the allowed roles for resources
     // The route guard should return 403
@@ -55,8 +53,8 @@ async fn inventory_clerk_cannot_access_resources() {
 async fn reviewer_can_view_resources() {
     let pool = setup_pool();
     let _seed = seed_users(&pool);
-    let c = client();
-    login_as(&c, "reviewer").await;
+    let (session, _) = login_as(&authed_client(), "reviewer").await;
+    let c = bearer_client(&session);
 
     let resp = c.get(&format!("{}/api/resources", base_url()))
         .send().await.unwrap();
@@ -67,8 +65,8 @@ async fn reviewer_can_view_resources() {
 async fn clinician_can_view_inventory() {
     let pool = setup_pool();
     let _seed = seed_users(&pool);
-    let c = client();
-    login_as(&c, "clinician").await;
+    let (session, _) = login_as(&authed_client(), "clinician").await;
+    let c = bearer_client(&session);
 
     let resp = c.get(&format!("{}/api/inventory/lots", base_url()))
         .send().await.unwrap();
@@ -79,8 +77,8 @@ async fn clinician_can_view_inventory() {
 async fn publisher_cannot_access_inventory() {
     let pool = setup_pool();
     let _seed = seed_users(&pool);
-    let c = client();
-    login_as(&c, "publisher").await;
+    let (session, _) = login_as(&authed_client(), "publisher").await;
+    let c = bearer_client(&session);
 
     let resp = c.get(&format!("{}/api/inventory/lots", base_url()))
         .send().await.unwrap();
@@ -91,8 +89,8 @@ async fn publisher_cannot_access_inventory() {
 async fn reviewer_cannot_create_resources() {
     let pool = setup_pool();
     let _seed = seed_users(&pool);
-    let c = client();
-    login_as(&c, "reviewer").await;
+    let (session, _) = login_as(&authed_client(), "reviewer").await;
+    let c = bearer_client(&session);
 
     // Reviewer is in the allowed_roles for update but not create (which requires Admin|Publisher)
     let resp = c.post(&format!("{}/api/resources", base_url()))

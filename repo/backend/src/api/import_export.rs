@@ -1,7 +1,6 @@
 use actix_multipart::Multipart;
 use actix_web::{web, HttpResponse};
 use futures_util::StreamExt;
-use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::errors::ApiError;
@@ -13,7 +12,7 @@ use crate::AppState;
 
 /// Uploads an .xlsx file and creates a queued import job.
 pub async fn upload_import(
-    state: web::Data<Arc<AppState>>,
+    state: web::Data<AppState>,
     ctx: RbacContext,
     mut payload: Multipart,
 ) -> Result<HttpResponse, ApiError> {
@@ -30,9 +29,8 @@ pub async fn upload_import(
         if field.name() == Some("file") {
             original_name = field
                 .content_disposition()
-                .get_filename()
-                .unwrap_or("import.xlsx")
-                .to_string();
+                .and_then(|cd| cd.get_filename().map(|s| s.to_string()))
+                .unwrap_or_else(|| "import.xlsx".to_string());
 
             while let Some(chunk) = field.next().await {
                 let data = chunk.map_err(|e| {
@@ -80,7 +78,7 @@ pub async fn upload_import(
 
 /// Retrieves the status and progress of an import job.
 pub async fn get_job(
-    state: web::Data<Arc<AppState>>,
+    state: web::Data<AppState>,
     ctx: RbacContext,
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse, ApiError> {
@@ -91,7 +89,7 @@ pub async fn get_job(
 
 /// Creates a new export request that requires approval before download.
 pub async fn request_export(
-    state: web::Data<Arc<AppState>>,
+    state: web::Data<AppState>,
     ctx: RbacContext,
     body: web::Json<ExportRequest>,
 ) -> Result<HttpResponse, ApiError> {
@@ -102,7 +100,7 @@ pub async fn request_export(
 
 /// Approves a pending export request with a watermark.
 pub async fn approve_export(
-    state: web::Data<Arc<AppState>>,
+    state: web::Data<AppState>,
     ctx: RbacContext,
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse, ApiError> {
@@ -120,7 +118,7 @@ pub async fn approve_export(
 
 /// Downloads an approved export as a watermarked JSON file.
 pub async fn download_export(
-    state: web::Data<Arc<AppState>>,
+    state: web::Data<AppState>,
     ctx: RbacContext,
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse, ApiError> {

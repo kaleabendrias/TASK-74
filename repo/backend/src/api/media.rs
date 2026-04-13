@@ -1,7 +1,6 @@
 use actix_multipart::Multipart;
 use actix_web::{web, HttpResponse};
 use futures_util::StreamExt;
-use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::errors::ApiError;
@@ -12,7 +11,7 @@ use crate::AppState;
 
 /// Handles multipart file upload and stores the media file.
 pub async fn upload(
-    state: web::Data<Arc<AppState>>,
+    state: web::Data<AppState>,
     ctx: RbacContext,
     mut payload: Multipart,
 ) -> Result<HttpResponse, ApiError> {
@@ -29,9 +28,8 @@ pub async fn upload(
         if field.name() == Some("file") {
             original_name = field
                 .content_disposition()
-                .get_filename()
-                .unwrap_or("unknown")
-                .to_string();
+                .and_then(|cd| cd.get_filename().map(|s| s.to_string()))
+                .unwrap_or_else(|| "unknown".to_string());
 
             while let Some(chunk) = field.next().await {
                 let data = chunk.map_err(|e| {
@@ -63,7 +61,7 @@ pub async fn upload(
 
 /// Downloads a media file by its ID.
 pub async fn download(
-    state: web::Data<Arc<AppState>>,
+    state: web::Data<AppState>,
     _ctx: RbacContext,
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse, ApiError> {

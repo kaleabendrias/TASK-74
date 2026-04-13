@@ -203,8 +203,7 @@ pub fn request_rent_change(
     req: &RentChangeRequest,
     user_id: Uuid,
 ) -> Result<RentChangeResponse, ApiError> {
-    let existing = repo::find_lodging_by_id(conn, lodging_id)?;
-    let existing_rent = bd_to_f64(&existing.monthly_rent).unwrap_or(0.0);
+    let _existing = repo::find_lodging_by_id(conn, lodging_id)?;
 
     // Validate new deposit against proposed rent
     validation::validate_deposit_cap(req.proposed_deposit, req.proposed_rent)?;

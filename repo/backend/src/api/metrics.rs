@@ -1,21 +1,14 @@
 use actix_web::{web, HttpResponse};
 use prometheus::{Encoder, TextEncoder};
-use std::sync::Arc;
 
 use crate::errors::ApiError;
 use crate::repository::{import_jobs, sessions};
 use crate::AppState;
 
-lazy_static_metrics! {}
-
-// We use prometheus global registry with lazy initialization.
-// In a real app these would be registered once at startup and shared via AppState.
-
 /// Returns Prometheus-formatted metrics including sessions, job queue depth, and uptime.
 pub async fn prometheus_metrics(
-    state: web::Data<Arc<AppState>>,
+    state: web::Data<AppState>,
 ) -> Result<HttpResponse, ApiError> {
-    // Gather dynamic metrics from DB
     let (active_sessions, queue_depth) = {
         let mut conn = state.db_pool.get()?;
         let sessions = sessions::count_active_sessions(&mut conn).unwrap_or(0);
@@ -23,8 +16,6 @@ pub async fn prometheus_metrics(
         (sessions, jobs)
     };
 
-    // Build metrics output manually since we can't rely on persistent registrations
-    // in this handler-per-request model without global state.
     let uptime = state.start_time.elapsed().as_secs();
 
     let body = format!(
@@ -56,7 +47,6 @@ pub async fn prometheus_metrics(
         active_sessions, queue_depth, uptime
     );
 
-    // Also include any metrics from the prometheus global registry
     let encoder = TextEncoder::new();
     let metric_families = prometheus::gather();
     let mut buffer = Vec::new();
@@ -66,10 +56,4 @@ pub async fn prometheus_metrics(
     Ok(HttpResponse::Ok()
         .content_type("text/plain; version=0.0.4; charset=utf-8")
         .body(format!("{}{}", body, registry_metrics)))
-}
-
-// This macro is intentionally empty — metrics are computed on-the-fly from DB state.
-// For production, you'd use actix-web-prom middleware registered at startup.
-macro_rules! lazy_static_metrics {
-    () => {};
 }

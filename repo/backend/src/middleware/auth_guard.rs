@@ -1,6 +1,5 @@
 use actix_web::{dev::Payload, web, Error, FromRequest, HttpRequest};
 use std::future::{ready, Ready};
-use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::errors::ApiError;
@@ -55,7 +54,7 @@ impl FromRequest for RbacContext {
 
 fn extract_rbac(req: &HttpRequest) -> Result<RbacContext, ApiError> {
     let state = req
-        .app_data::<web::Data<Arc<AppState>>>()
+        .app_data::<web::Data<AppState>>()
         .ok_or_else(|| ApiError::internal("App state not configured"))?;
 
     // Read session token from cookie

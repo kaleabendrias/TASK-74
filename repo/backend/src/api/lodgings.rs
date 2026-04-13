@@ -1,5 +1,4 @@
 use actix_web::{web, HttpResponse};
-use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::errors::ApiError;
@@ -11,7 +10,7 @@ use crate::AppState;
 
 /// Creates a new lodging entry (requires Administrator or Publisher role).
 pub async fn create(
-    state: web::Data<Arc<AppState>>,
+    state: web::Data<AppState>,
     ctx: RbacContext,
     body: web::Json<CreateLodgingRequest>,
 ) -> Result<HttpResponse, ApiError> {
@@ -24,7 +23,7 @@ pub async fn create(
 
 /// Retrieves a single lodging by its ID.
 pub async fn get(
-    state: web::Data<Arc<AppState>>,
+    state: web::Data<AppState>,
     _ctx: RbacContext,
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse, ApiError> {
@@ -35,7 +34,7 @@ pub async fn get(
 
 /// Lists lodgings scoped to the user's facility when applicable.
 pub async fn list(
-    state: web::Data<Arc<AppState>>,
+    state: web::Data<AppState>,
     ctx: RbacContext,
 ) -> Result<HttpResponse, ApiError> {
     let mut conn = state.db_pool.get()?;
@@ -46,7 +45,7 @@ pub async fn list(
 
 /// Updates an existing lodging by ID.
 pub async fn update(
-    state: web::Data<Arc<AppState>>,
+    state: web::Data<AppState>,
     ctx: RbacContext,
     path: web::Path<Uuid>,
     body: web::Json<UpdateLodgingRequest>,
@@ -62,7 +61,7 @@ pub async fn update(
 
 /// Returns all availability periods for a lodging.
 pub async fn get_periods(
-    state: web::Data<Arc<AppState>>,
+    state: web::Data<AppState>,
     _ctx: RbacContext,
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse, ApiError> {
@@ -73,7 +72,7 @@ pub async fn get_periods(
 
 /// Creates or replaces an availability period for a lodging.
 pub async fn upsert_period(
-    state: web::Data<Arc<AppState>>,
+    state: web::Data<AppState>,
     ctx: RbacContext,
     path: web::Path<Uuid>,
     body: web::Json<LodgingPeriodRequest>,
@@ -89,7 +88,7 @@ pub async fn upsert_period(
 
 /// Submits a rent change request for a lodging.
 pub async fn request_rent_change(
-    state: web::Data<Arc<AppState>>,
+    state: web::Data<AppState>,
     ctx: RbacContext,
     path: web::Path<Uuid>,
     body: web::Json<RentChangeRequest>,
@@ -109,7 +108,7 @@ pub struct RentChangePath {
 
 /// Approves a pending rent change request.
 pub async fn approve_rent_change(
-    state: web::Data<Arc<AppState>>,
+    state: web::Data<AppState>,
     ctx: RbacContext,
     path: web::Path<RentChangePath>,
 ) -> Result<HttpResponse, ApiError> {
@@ -123,7 +122,7 @@ pub async fn approve_rent_change(
 
 /// Rejects a pending rent change request.
 pub async fn reject_rent_change(
-    state: web::Data<Arc<AppState>>,
+    state: web::Data<AppState>,
     ctx: RbacContext,
     path: web::Path<RentChangePath>,
 ) -> Result<HttpResponse, ApiError> {

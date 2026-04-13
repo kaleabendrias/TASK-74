@@ -12,15 +12,15 @@ name = "tourism-backend"
 path = "src/main.rs"
 
 [dependencies]
-actix-web = "4"
+actix-web = "=4.8.0"
 actix-rt = "2"
-actix-cors = "0.7"
-actix-multipart = "0.7"
-actix-web-prom = "0.8"
+actix-cors = "=0.7.0"
+actix-multipart = "=0.7.2"
+actix-http = "=3.9.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "0.8"
-diesel = { version = "2", features = ["postgres", "r2d2", "chrono", "serde_json", "numeric"] }
+diesel = { version = "2", features = ["postgres", "r2d2", "chrono", "serde_json", "numeric", "uuid"] }
 diesel_migrations = "2"
 r2d2 = "0.8"
 chrono = { version = "0.4", features = ["serde"] }
@@ -35,12 +35,13 @@ rand = "0.8"
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
-tracing-actix-web = "0.7"
-config = "0.14"
+tracing-actix-web = "=0.7.15"
+config = "=0.14.1"
 thiserror = "1"
 bigdecimal = { version = "0.4", features = ["serde"] }
-calamine = "0.24"
-infer = "0.16"
+calamine = "=0.24.0"
+infer = "=0.16.0"
 futures-util = "0.3"
 prometheus = "0.13"
 sanitize-filename = "0.5"
+time = "=0.3.36"

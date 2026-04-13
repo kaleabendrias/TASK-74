@@ -1,39 +1,4 @@
 -- ============================================================
--- Enum types
--- ============================================================
-CREATE TYPE user_role AS ENUM (
-    'Administrator', 'Publisher', 'Reviewer', 'Clinician', 'InventoryClerk'
-);
-
-CREATE TYPE resource_state AS ENUM (
-    'draft', 'in_review', 'published', 'offline'
-);
-
-CREATE TYPE lodging_state AS ENUM (
-    'draft', 'in_review', 'published', 'offline'
-);
-
-CREATE TYPE rent_change_status AS ENUM (
-    'pending', 'approved', 'rejected'
-);
-
-CREATE TYPE inventory_direction AS ENUM (
-    'inbound', 'outbound'
-);
-
-CREATE TYPE review_decision_enum AS ENUM (
-    'approved', 'rejected', 'revision_requested'
-);
-
-CREATE TYPE import_job_status AS ENUM (
-    'queued', 'running', 'completed', 'failed'
-);
-
-CREATE TYPE export_approval_status AS ENUM (
-    'pending', 'approved', 'rejected'
-);
-
--- ============================================================
 -- facilities (referenced by users, lodgings, warehouses, etc.)
 -- ============================================================
 CREATE TABLE facilities (
@@ -49,9 +14,9 @@ CREATE TABLE users (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     username        VARCHAR(150) NOT NULL UNIQUE,
     password_hash   TEXT NOT NULL,
-    role            user_role NOT NULL DEFAULT 'Reviewer',
+    role            VARCHAR(50) NOT NULL DEFAULT 'Reviewer',
     facility_id     UUID REFERENCES facilities(id),
-    totp_secret     BYTEA,          -- AES-256-GCM encrypted
+    totp_secret     BYTEA,
     mfa_enabled     BOOLEAN NOT NULL DEFAULT FALSE,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -94,7 +59,7 @@ CREATE TABLE resources (
     address               TEXT,
     latitude              DOUBLE PRECISION,
     longitude             DOUBLE PRECISION,
-    state                 resource_state NOT NULL DEFAULT 'draft',
+    state                 VARCHAR(50) NOT NULL DEFAULT 'draft',
     scheduled_publish_at  TIMESTAMPTZ,
     current_version       INTEGER NOT NULL DEFAULT 1,
     created_by            UUID NOT NULL REFERENCES users(id),
@@ -122,7 +87,7 @@ CREATE TABLE lodgings (
     id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name                  VARCHAR(500) NOT NULL,
     description           TEXT,
-    state                 lodging_state NOT NULL DEFAULT 'draft',
+    state                 VARCHAR(50) NOT NULL DEFAULT 'draft',
     amenities             JSONB NOT NULL DEFAULT '[]',
     facility_id           UUID REFERENCES facilities(id),
     deposit_amount        NUMERIC(12, 2),
@@ -154,7 +119,7 @@ CREATE TABLE lodging_rent_changes (
     lodging_id       UUID NOT NULL REFERENCES lodgings(id) ON DELETE CASCADE,
     proposed_rent    NUMERIC(12, 2) NOT NULL,
     proposed_deposit NUMERIC(12, 2) NOT NULL,
-    status           rent_change_status NOT NULL DEFAULT 'pending',
+    status           VARCHAR(50) NOT NULL DEFAULT 'pending',
     requested_by     UUID NOT NULL REFERENCES users(id),
     reviewed_by      UUID REFERENCES users(id),
     reviewed_at      TIMESTAMPTZ,
@@ -202,7 +167,7 @@ CREATE TABLE inventory_lots (
 CREATE TABLE inventory_transactions (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     lot_id       UUID NOT NULL REFERENCES inventory_lots(id),
-    direction    inventory_direction NOT NULL,
+    direction    VARCHAR(20) NOT NULL,
     quantity     INTEGER NOT NULL,
     reason       TEXT,
     performed_by UUID NOT NULL REFERENCES users(id),
@@ -231,7 +196,7 @@ CREATE TABLE review_decisions (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     entity_type VARCHAR(100) NOT NULL,
     entity_id   UUID NOT NULL,
-    decision    review_decision_enum NOT NULL,
+    decision    VARCHAR(50) NOT NULL,
     comment     TEXT,
     decided_by  UUID NOT NULL REFERENCES users(id),
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -247,7 +212,7 @@ CREATE TABLE import_jobs (
     total_rows          INTEGER NOT NULL DEFAULT 0,
     processed_rows      INTEGER NOT NULL DEFAULT 0,
     progress_percent    SMALLINT NOT NULL DEFAULT 0,
-    status              import_job_status NOT NULL DEFAULT 'queued',
+    status              VARCHAR(50) NOT NULL DEFAULT 'queued',
     retries             INTEGER NOT NULL DEFAULT 0,
     max_retries         INTEGER NOT NULL DEFAULT 3,
     failure_log         TEXT,
@@ -319,7 +284,7 @@ CREATE TABLE export_approvals (
     requested_by    UUID NOT NULL REFERENCES users(id),
     approved_by     UUID REFERENCES users(id),
     watermark_text  TEXT,
-    status          export_approval_status NOT NULL DEFAULT 'pending',
+    status          VARCHAR(50) NOT NULL DEFAULT 'pending',
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

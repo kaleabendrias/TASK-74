@@ -21,8 +21,8 @@ async fn health_returns_200() {
 async fn metrics_returns_prometheus_format() {
     let pool = setup_pool();
     let _seed = seed_users(&pool);
-    let c = authed_client();
-    login_as(&c, "admin").await;
+    let (session, _) = login_as(&authed_client(), "admin").await;
+    let c = bearer_client(&session);
 
     let resp = c.get(&format!("{}/api/metrics", base_url()))
         .send().await.unwrap();

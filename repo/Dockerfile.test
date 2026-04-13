@@ -1,5 +1,4 @@
-# Test runner container
-FROM rust:1.78-bookworm
+FROM rust:1.86-bookworm
 
 RUN apt-get update && apt-get install -y \
     libpq-dev \
@@ -7,34 +6,33 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install cargo-tarpaulin for coverage
-RUN cargo install cargo-tarpaulin --locked
-
 WORKDIR /app
 
-# Copy workspace
+# Copy workspace manifest first for caching
 COPY Cargo.toml ./
+COPY backend/Cargo.toml ./backend/Cargo.toml
+COPY unit_tests/Cargo.toml ./unit_tests/Cargo.toml
+COPY API_tests/Cargo.toml ./API_tests/Cargo.toml
+
+# Create stub src files so cargo can resolve the workspace
+RUN mkdir -p backend/src unit_tests/src API_tests/src && \
+    echo "fn main() {}" > backend/src/main.rs && \
+    echo "" > backend/src/lib.rs && \
+    echo "" > unit_tests/src/lib.rs && \
+    echo "" > API_tests/src/lib.rs
+
+# Pre-fetch dependencies
+RUN cargo fetch 2>/dev/null || true
+
+# Now copy all actual source
 COPY backend/ ./backend/
 COPY unit_tests/ ./unit_tests/
 COPY API_tests/ ./API_tests/
 
-# Pre-build dependencies
-RUN cargo build --tests 2>/dev/null || true
+# Build tests (not run — just compile to catch errors early)
+RUN cargo test --no-run -p unit_tests 2>&1 || true
+RUN cargo test --no-run -p api_tests 2>&1 || true
 
-# Create coverage output directory
 RUN mkdir -p /coverage
 
-CMD ["bash", "-c", "\
-    echo '=== Running Unit Tests with Coverage ===' && \
-    cargo tarpaulin --workspace -p unit_tests \
-        --out xml --output-dir /coverage \
-        --skip-clean \
-        -- --test-threads=1 2>&1 | tee /coverage/unit_tests.log && \
-    mv /coverage/cobertura.xml /coverage/unit_coverage.xml && \
-    echo '=== Running API Tests with Coverage ===' && \
-    cargo tarpaulin --workspace -p api_tests \
-        --out xml --output-dir /coverage \
-        --skip-clean \
-        -- --test-threads=1 2>&1 | tee /coverage/api_tests.log && \
-    mv /coverage/cobertura.xml /coverage/api_coverage.xml && \
-    echo '=== Tests Complete ==='"]
+CMD ["bash"]

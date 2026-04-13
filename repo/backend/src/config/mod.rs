@@ -1,5 +1,7 @@
 use serde::Deserialize;
 
+use ::config as config_crate;
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct AppConfig {
     pub server: ServerConfig,
@@ -126,9 +128,9 @@ pub struct AppMetaConfig {
 impl AppConfig {
     /// Loads application configuration from `config.toml` and environment variables.
     pub fn load() -> Self {
-        let builder = config::Config::builder()
-            .add_source(config::File::with_name("config.toml").required(false))
-            .add_source(config::Environment::with_prefix("").separator("_"))
+        let builder = config_crate::Config::builder()
+            .add_source(config_crate::File::with_name("config.toml").required(false))
+            .add_source(config_crate::Environment::with_prefix("").separator("_"))
             .build()
             .expect("Failed to build configuration");
 

@@ -19,12 +19,3 @@ DROP TABLE IF EXISTS csrf_tokens CASCADE;
 DROP TABLE IF EXISTS sessions CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
 DROP TABLE IF EXISTS facilities CASCADE;
-
-DROP TYPE IF EXISTS export_approval_status;
-DROP TYPE IF EXISTS import_job_status;
-DROP TYPE IF EXISTS review_decision_enum;
-DROP TYPE IF EXISTS inventory_direction;
-DROP TYPE IF EXISTS rent_change_status;
-DROP TYPE IF EXISTS lodging_state;
-DROP TYPE IF EXISTS resource_state;
-DROP TYPE IF EXISTS user_role;

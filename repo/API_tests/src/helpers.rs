@@ -19,7 +19,7 @@ pub fn test_config() -> AppConfig {
         tls: TlsConfig { cert_path: "/dev/null".into(), key_path: "/dev/null".into() },
         auth: AuthConfig {
             hmac_secret: "test-hmac-secret".into(),
-            request_signing_key: "test-signing-key".into(),
+            request_signing_key: "req-sign-key-tourism-portal-2024".into(),
             session_ttl_secs: 28800,
             csrf_token_ttl_secs: 3600,
             argon2: Argon2Config { memory_kib: 4096, iterations: 1, parallelism: 1, output_len: 32 },
@@ -160,29 +160,49 @@ pub fn base_url() -> String {
     std::env::var("TEST_BASE_URL").unwrap_or_else(|_| "http://localhost:8080".into())
 }
 
-/// Login helper — returns session cookie and csrf token
+/// Login helper — extracts session token from Set-Cookie header and returns it
+/// along with the CSRF token. Uses Bearer auth for subsequent requests since
+/// the session cookie has Secure flag which won't work over plain HTTP in tests.
 pub async fn login_as(client: &reqwest::Client, username: &str) -> (String, String) {
     let resp = client.post(&format!("{}/api/auth/login", base_url()))
         .json(&serde_json::json!({"username": username, "password": "testpassword"}))
         .send().await.unwrap();
-    assert_eq!(resp.status(), 200, "Login failed for {}: {:?}", username, resp.text().await);
+    assert_eq!(resp.status().as_u16(), 200, "Login failed for {}", username);
 
-    // Re-do to get the cookie
-    let resp = client.post(&format!("{}/api/auth/login", base_url()))
-        .json(&serde_json::json!({"username": username, "password": "testpassword"}))
-        .send().await.unwrap();
-
-    let session = resp.cookies().find(|c| c.name() == "session")
-        .map(|c| c.value().to_string())
+    // Extract session token from Set-Cookie header
+    let session = resp.headers()
+        .get_all("set-cookie")
+        .iter()
+        .find_map(|v| {
+            let s = v.to_str().ok()?;
+            if s.starts_with("session=") {
+                Some(s.split(';').next()?.trim_start_matches("session=").to_string())
+            } else {
+                None
+            }
+        })
         .unwrap_or_default();
+
     let body: serde_json::Value = resp.json().await.unwrap();
     let csrf = body["csrf_token"].as_str().unwrap_or("").to_string();
     (session, csrf)
 }
 
+/// Creates a client that injects the Bearer token into every request.
+pub fn bearer_client(session_token: &str) -> reqwest::Client {
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert(
+        reqwest::header::AUTHORIZATION,
+        reqwest::header::HeaderValue::from_str(&format!("Bearer {}", session_token)).unwrap(),
+    );
+    reqwest::Client::builder()
+        .default_headers(headers)
+        .build()
+        .unwrap()
+}
+
 pub fn authed_client() -> reqwest::Client {
     reqwest::Client::builder()
-        .cookie_store(true)
         .build()
         .unwrap()
 }

@@ -1,5 +1,5 @@
 use actix_web::{cookie, web, HttpRequest, HttpResponse};
-use std::sync::Arc;
+use time::Duration as TimeDuration;
 
 use crate::errors::ApiError;
 use crate::middleware::auth_guard::RbacContext;
@@ -9,7 +9,7 @@ use crate::AppState;
 
 /// Authenticates a user and returns a session cookie with a CSRF token.
 pub async fn login(
-    state: web::Data<Arc<AppState>>,
+    state: web::Data<AppState>,
     body: web::Json<LoginRequest>,
 ) -> Result<HttpResponse, ApiError> {
     let mut conn = state.db_pool.get()?;
@@ -28,7 +28,7 @@ pub async fn login(
         .http_only(true)
         .secure(true)
         .same_site(cookie::SameSite::Strict)
-        .max_age(cookie::time::Duration::seconds(
+        .max_age(TimeDuration::seconds(
             state.config.auth.session_ttl_secs as i64,
         ))
         .finish();
@@ -45,7 +45,7 @@ pub async fn login(
 
 /// Logs out the current user by invalidating the session and clearing the cookie.
 pub async fn logout(
-    state: web::Data<Arc<AppState>>,
+    state: web::Data<AppState>,
     req: HttpRequest,
 ) -> Result<HttpResponse, ApiError> {
     let token = req
@@ -69,7 +69,7 @@ pub async fn logout(
         .http_only(true)
         .secure(true)
         .same_site(cookie::SameSite::Strict)
-        .max_age(cookie::time::Duration::ZERO)
+        .max_age(TimeDuration::ZERO)
         .finish();
 
     Ok(HttpResponse::Ok()
@@ -79,7 +79,7 @@ pub async fn logout(
 
 /// Returns the profile of the currently authenticated user.
 pub async fn me(
-    state: web::Data<Arc<AppState>>,
+    state: web::Data<AppState>,
     ctx: RbacContext,
 ) -> Result<HttpResponse, ApiError> {
     let mut conn = state.db_pool.get()?;

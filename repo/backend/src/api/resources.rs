@@ -1,5 +1,4 @@
 use actix_web::{web, HttpResponse};
-use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::errors::ApiError;
@@ -11,7 +10,7 @@ use crate::AppState;
 
 /// Creates a new resource entry (requires Administrator or Publisher role).
 pub async fn create(
-    state: web::Data<Arc<AppState>>,
+    state: web::Data<AppState>,
     ctx: RbacContext,
     body: web::Json<CreateResourceRequest>,
 ) -> Result<HttpResponse, ApiError> {
@@ -24,7 +23,7 @@ pub async fn create(
 
 /// Retrieves a single resource by its ID.
 pub async fn get(
-    state: web::Data<Arc<AppState>>,
+    state: web::Data<AppState>,
     ctx: RbacContext,
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse, ApiError> {
@@ -35,7 +34,7 @@ pub async fn get(
 
 /// Lists resources with optional filtering and facility-scoped access.
 pub async fn list(
-    state: web::Data<Arc<AppState>>,
+    state: web::Data<AppState>,
     ctx: RbacContext,
     query: web::Query<ResourceQuery>,
 ) -> Result<HttpResponse, ApiError> {
@@ -49,7 +48,7 @@ pub async fn list(
 
 /// Updates an existing resource by ID.
 pub async fn update(
-    state: web::Data<Arc<AppState>>,
+    state: web::Data<AppState>,
     ctx: RbacContext,
     path: web::Path<Uuid>,
     body: web::Json<UpdateResourceRequest>,

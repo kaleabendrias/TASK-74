@@ -1,5 +1,4 @@
 use actix_web::{web, HttpResponse};
-use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::errors::ApiError;
@@ -11,7 +10,7 @@ use crate::AppState;
 
 /// Creates a new inventory lot.
 pub async fn create_lot(
-    state: web::Data<Arc<AppState>>,
+    state: web::Data<AppState>,
     ctx: RbacContext,
     body: web::Json<CreateLotRequest>,
 ) -> Result<HttpResponse, ApiError> {
@@ -24,7 +23,7 @@ pub async fn create_lot(
 
 /// Retrieves a single inventory lot by its ID.
 pub async fn get_lot(
-    state: web::Data<Arc<AppState>>,
+    state: web::Data<AppState>,
     ctx: RbacContext,
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse, ApiError> {
@@ -37,7 +36,7 @@ pub async fn get_lot(
 
 /// Lists inventory lots with optional facility and expiry filtering.
 pub async fn list_lots(
-    state: web::Data<Arc<AppState>>,
+    state: web::Data<AppState>,
     ctx: RbacContext,
     query: web::Query<LotQuery>,
 ) -> Result<HttpResponse, ApiError> {
@@ -53,7 +52,7 @@ pub async fn list_lots(
 
 /// Reserves a quantity from an inventory lot's on-hand stock.
 pub async fn reserve(
-    state: web::Data<Arc<AppState>>,
+    state: web::Data<AppState>,
     ctx: RbacContext,
     path: web::Path<Uuid>,
     body: web::Json<ReserveRequest>,
@@ -67,7 +66,7 @@ pub async fn reserve(
 
 /// Records a new inventory transaction (inbound or outbound).
 pub async fn create_transaction(
-    state: web::Data<Arc<AppState>>,
+    state: web::Data<AppState>,
     ctx: RbacContext,
     body: web::Json<CreateTransactionRequest>,
 ) -> Result<HttpResponse, ApiError> {
@@ -80,7 +79,7 @@ pub async fn create_transaction(
 
 /// Lists inventory transactions with optional filtering.
 pub async fn list_transactions(
-    state: web::Data<Arc<AppState>>,
+    state: web::Data<AppState>,
     ctx: RbacContext,
     query: web::Query<TransactionQuery>,
 ) -> Result<HttpResponse, ApiError> {
@@ -98,7 +97,7 @@ pub struct AuditPrintQuery {
 
 /// Returns an HTML audit trail of transactions for a given lot.
 pub async fn audit_print(
-    state: web::Data<Arc<AppState>>,
+    state: web::Data<AppState>,
     ctx: RbacContext,
     query: web::Query<AuditPrintQuery>,
 ) -> Result<HttpResponse, ApiError> {

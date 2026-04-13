@@ -20,17 +20,13 @@ fn verify_valid_totp_code() {
     let master_key = test_key();
     let config = test_totp_config();
 
-    // Generate a TOTP secret, encrypt it, then generate a code and verify
     let secret = Secret::generate_secret();
     let secret_bytes = secret.to_bytes().unwrap();
     let encrypted = aes_gcm::encrypt(&secret_bytes, &master_key);
 
-    // Build a TOTP instance to generate the current code
     let totp_instance = TOTP::new(
         Algorithm::SHA1, 6, 1, 30,
         secret_bytes.clone(),
-        Some("TestIssuer".to_string()),
-        String::new(),
     ).unwrap();
     let code = totp_instance.generate_current().unwrap();
 
@@ -58,14 +54,10 @@ fn verify_expired_code_fails() {
     let secret_bytes = secret.to_bytes().unwrap();
     let encrypted = aes_gcm::encrypt(&secret_bytes, &master_key);
 
-    // Generate a code for a time step far in the past
     let totp_instance = TOTP::new(
         Algorithm::SHA1, 6, 1, 30,
         secret_bytes,
-        Some("TestIssuer".to_string()),
-        String::new(),
     ).unwrap();
-    // Time 0 would be 1970 — definitely outside skew
     let old_code = totp_instance.generate(0);
 
     assert!(!totp::verify(&encrypted, &old_code, &config, &master_key));
@@ -92,11 +84,8 @@ fn verify_with_boundary_time_step() {
     let totp_instance = TOTP::new(
         Algorithm::SHA1, 6, 1, 30,
         secret_bytes,
-        Some("TestIssuer".to_string()),
-        String::new(),
     ).unwrap();
 
-    // Current time step code should verify
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()

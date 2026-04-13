@@ -1,7 +1,5 @@
 use crate::helpers::*;
 
-fn client() -> reqwest::Client { authed_client() }
-
 // Helper to create a minimal valid PNG (1x1 pixel)
 fn minimal_png() -> Vec<u8> {
     vec![
@@ -21,8 +19,8 @@ fn minimal_png() -> Vec<u8> {
 async fn upload_valid_png() {
     let pool = setup_pool();
     let _seed = seed_users(&pool);
-    let c = client();
-    login_as(&c, "admin").await;
+    let (session, _) = login_as(&authed_client(), "admin").await;
+    let c = bearer_client(&session);
 
     std::fs::create_dir_all("/tmp/test_uploads").ok();
 
@@ -44,8 +42,8 @@ async fn upload_valid_png() {
 async fn upload_exe_rejected() {
     let pool = setup_pool();
     let _seed = seed_users(&pool);
-    let c = client();
-    login_as(&c, "admin").await;
+    let (session, _) = login_as(&authed_client(), "admin").await;
+    let c = bearer_client(&session);
 
     let form = reqwest::multipart::Form::new()
         .part("file", reqwest::multipart::Part::bytes(vec![0x4D, 0x5A, 0x00, 0x00])
@@ -64,8 +62,8 @@ async fn upload_exe_rejected() {
 async fn upload_jpg_extension_pdf_content_rejected() {
     let pool = setup_pool();
     let _seed = seed_users(&pool);
-    let c = client();
-    login_as(&c, "admin").await;
+    let (session, _) = login_as(&authed_client(), "admin").await;
+    let c = bearer_client(&session);
 
     // PDF magic bytes with .jpg extension
     let pdf_bytes = b"%PDF-1.4 fake content".to_vec();
@@ -86,8 +84,8 @@ async fn upload_jpg_extension_pdf_content_rejected() {
 async fn download_uploaded_file() {
     let pool = setup_pool();
     let _seed = seed_users(&pool);
-    let c = client();
-    login_as(&c, "admin").await;
+    let (session, _) = login_as(&authed_client(), "admin").await;
+    let c = bearer_client(&session);
 
     std::fs::create_dir_all("/tmp/test_uploads").ok();
     let png = minimal_png();

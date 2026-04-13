@@ -21,7 +21,7 @@ async fn connector_valid_payload() {
     let body = r#"{"entity_type":"resource","data":{"key":"value"}}"#;
     let nonce = &uuid::Uuid::new_v4().to_string();
     let ts = &chrono::Utc::now().timestamp().to_string();
-    let sig = sign_request("test-signing-key", body, nonce, ts);
+    let sig = sign_request("req-sign-key-tourism-portal-2024", body, nonce, ts);
 
     let c = reqwest::Client::new();
     let resp = c.post(&format!("{}/api/connector/inbound", base_url()))
@@ -44,7 +44,7 @@ async fn connector_expired_timestamp() {
     let body = r#"{"entity_type":"resource","data":{}}"#;
     let nonce = &uuid::Uuid::new_v4().to_string();
     let old_ts = &(chrono::Utc::now().timestamp() - 600).to_string(); // 10 min ago
-    let sig = sign_request("test-signing-key", body, nonce, old_ts);
+    let sig = sign_request("req-sign-key-tourism-portal-2024", body, nonce, old_ts);
 
     let c = reqwest::Client::new();
     let resp = c.post(&format!("{}/api/connector/inbound", base_url()))
@@ -65,7 +65,7 @@ async fn connector_replayed_nonce() {
     let body = r#"{"entity_type":"resource","data":{}}"#;
     let nonce = &uuid::Uuid::new_v4().to_string();
     let ts = &chrono::Utc::now().timestamp().to_string();
-    let sig = sign_request("test-signing-key", body, nonce, ts);
+    let sig = sign_request("req-sign-key-tourism-portal-2024", body, nonce, ts);
 
     let c = reqwest::Client::new();
     // First request succeeds

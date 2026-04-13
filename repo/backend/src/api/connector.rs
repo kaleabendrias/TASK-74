@@ -1,5 +1,4 @@
 use actix_web::{web, HttpRequest, HttpResponse};
-use std::sync::Arc;
 
 use crate::errors::ApiError;
 use crate::service::connector as svc;
@@ -7,7 +6,7 @@ use crate::AppState;
 
 /// Receives and validates a signed inbound connector request.
 pub async fn inbound(
-    state: web::Data<Arc<AppState>>,
+    state: web::Data<AppState>,
     req: HttpRequest,
     body: web::Bytes,
 ) -> Result<HttpResponse, ApiError> {

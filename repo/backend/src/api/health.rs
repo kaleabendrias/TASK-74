@@ -1,14 +1,13 @@
 use actix_web::{web, HttpResponse};
 use diesel::prelude::*;
 use diesel::sql_query;
-use std::sync::Arc;
 
 use crate::errors::ApiError;
 use crate::model::HealthResponse;
 use crate::AppState;
 
 /// Returns the service health status including database connectivity and uptime.
-pub async fn health_check(state: web::Data<Arc<AppState>>) -> Result<HttpResponse, ApiError> {
+pub async fn health_check(state: web::Data<AppState>) -> Result<HttpResponse, ApiError> {
     let db_connected = match state.db_pool.get() {
         Ok(mut conn) => sql_query("SELECT 1").execute(&mut conn).is_ok(),
         Err(_) => false,

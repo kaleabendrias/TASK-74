@@ -45,8 +45,9 @@ async fn login_nonexistent_user() {
 async fn me_returns_profile() {
     let pool = setup_pool();
     let _seed = seed_users(&pool);
-    let c = client();
-    let (_, csrf) = login_as(&c, "admin").await;
+    let c = authed_client();
+    let (session, csrf) = login_as(&c, "admin").await;
+    let c = bearer_client(&session);
 
     let resp = c.get(&format!("{}/api/auth/me", base_url()))
         .header("X-CSRF-Token", &csrf)
@@ -69,8 +70,9 @@ async fn me_without_session_returns_401() {
 async fn logout_clears_session() {
     let pool = setup_pool();
     let _seed = seed_users(&pool);
-    let c = client();
-    login_as(&c, "admin").await;
+    let c = authed_client();
+    let (session, _) = login_as(&c, "admin").await;
+    let c = bearer_client(&session);
 
     let resp = c.post(&format!("{}/api/auth/logout", base_url()))
         .send().await.unwrap();

@@ -1,15 +1,13 @@
 use crate::helpers::*;
 
-fn client() -> reqwest::Client { authed_client() }
-
 #[tokio::test]
 async fn export_request_and_approve_flow() {
     let pool = setup_pool();
     let _seed = seed_users(&pool);
-    let c = client();
 
     // Request export as clerk
-    login_as(&c, "clerk").await;
+    let (session, _) = login_as(&authed_client(), "clerk").await;
+    let c = bearer_client(&session);
     let resp = c.post(&format!("{}/api/export/request", base_url()))
         .json(&serde_json::json!({"export_type": "inventory"}))
         .send().await.unwrap();
@@ -24,7 +22,8 @@ async fn export_request_and_approve_flow() {
     assert_eq!(resp.status(), 403);
 
     // Approve as admin
-    login_as(&c, "admin").await;
+    let (session, _) = login_as(&authed_client(), "admin").await;
+    let c = bearer_client(&session);
     let resp = c.post(&format!("{}/api/export/approve/{}", base_url(), export_id))
         .send().await.unwrap();
     assert_eq!(resp.status(), 200);
@@ -44,8 +43,8 @@ async fn export_request_and_approve_flow() {
 async fn import_xlsx_only() {
     let pool = setup_pool();
     let _seed = seed_users(&pool);
-    let c = client();
-    login_as(&c, "admin").await;
+    let (session, _) = login_as(&authed_client(), "admin").await;
+    let c = bearer_client(&session);
 
     // Try uploading a non-xlsx file
     let form = reqwest::multipart::Form::new()
