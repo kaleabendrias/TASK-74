@@ -1,0 +1,42 @@
+[package]
+name = "tourism-backend"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "tourism-backend"
+path = "src/main.rs"
+
+[dependencies]
+actix-web = "4"
+actix-rt = "2"
+actix-cors = "0.7"
+actix-multipart = "0.7"
+actix-web-prom = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+diesel = { version = "2", features = ["postgres", "r2d2", "chrono", "serde_json", "numeric"] }
+diesel_migrations = "2"
+r2d2 = "0.8"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+argon2 = "0.5"
+aes-gcm = "0.10"
+hmac = "0.12"
+sha2 = "0.10"
+totp-rs = { version = "5", features = ["gen_secret"] }
+base64 = "0.22"
+rand = "0.8"
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
+tracing-actix-web = "0.7"
+config = "0.14"
+thiserror = "1"
+bigdecimal = { version = "0.4", features = ["serde"] }
+calamine = "0.24"
+infer = "0.16"
+futures-util = "0.3"
+prometheus = "0.13"
+sanitize-filename = "0.5"

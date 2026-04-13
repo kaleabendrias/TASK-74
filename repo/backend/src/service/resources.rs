@@ -1,0 +1,306 @@
+use chrono::{NaiveDateTime, Utc};
+use diesel::PgConnection;
+use uuid::Uuid;
+
+use crate::errors::{ApiError, FieldError};
+use crate::model::{
+    CreateResourceRequest, PaginatedResponse, ResourceQuery, ResourceResponse, UserRole,
+};
+use crate::repository::{media, resources};
+use crate::service::validation;
+
+pub fn create_resource(
+    conn: &mut PgConnection,
+    req: &CreateResourceRequest,
+    user_id: Uuid,
+) -> Result<ResourceResponse, ApiError> {
+    let mut errors = vec![];
+
+    if let Err(e) = validation::validate_title(&req.title) {
+        errors.push(e);
+    }
+    if let Err(e) = validation::validate_tags(&req.tags) {
+        errors.push(e);
+    }
+    if let Err(e) = validation::validate_hours(&req.hours) {
+        errors.push(e);
+    }
+    if let Err(e) = validation::validate_pricing(&req.pricing) {
+        errors.push(e);
+    }
+    if req.address.is_empty() {
+        errors.push(FieldError {
+            field: "address".into(),
+            message: "Address is required".into(),
+        });
+    }
+    if let Err(mut e) = validation::validate_lat_lng(req.latitude, req.longitude) {
+        errors.append(&mut e);
+    }
+
+    if !errors.is_empty() {
+        return Err(ApiError::unprocessable_fields(
+            "VALIDATION_ERROR",
+            "Resource validation failed",
+            errors,
+        ));
+    }
+
+    // Validate media refs exist
+    if !req.media_refs.is_empty() {
+        let existing = media::ids_exist(conn, &req.media_refs)?;
+        if existing.len() != req.media_refs.len() {
+            return Err(ApiError::unprocessable(
+                "INVALID_MEDIA_REFS",
+                "One or more media_refs reference non-existent media files",
+            ));
+        }
+    }
+
+    // Parse scheduled_publish_at
+    let scheduled = parse_scheduled_publish(&req.scheduled_publish_at)?;
+
+    let new = resources::NewResource {
+        title: &req.title,
+        category: req.category.as_deref(),
+        tags: serde_json::json!(req.tags),
+        hours: req.hours.clone(),
+        pricing: req.pricing.clone(),
+        media_refs: serde_json::json!(req.media_refs),
+        address: Some(&req.address),
+        latitude: req.latitude,
+        longitude: req.longitude,
+        state: "draft",
+        scheduled_publish_at: scheduled,
+        current_version: 1,
+        created_by: user_id,
+    };
+
+    let row = resources::insert(conn, &new)?;
+    Ok(row_to_response(&row))
+}
+
+pub fn get_resource(conn: &mut PgConnection, id: Uuid) -> Result<ResourceResponse, ApiError> {
+    let row = resources::find_by_id(conn, id)?;
+    Ok(row_to_response(&row))
+}
+
+pub fn update_resource(
+    conn: &mut PgConnection,
+    id: Uuid,
+    req: &crate::model::UpdateResourceRequest,
+    user_id: Uuid,
+    user_role: UserRole,
+) -> Result<ResourceResponse, ApiError> {
+    let existing = resources::find_by_id(conn, id)?;
+    let mut errors = vec![];
+
+    if let Some(ref title) = req.title {
+        if let Err(e) = validation::validate_title(title) {
+            errors.push(e);
+        }
+    }
+    if let Some(ref tags) = req.tags {
+        if let Err(e) = validation::validate_tags(tags) {
+            errors.push(e);
+        }
+    }
+    if let Some(ref hours) = req.hours {
+        if let Err(e) = validation::validate_hours(hours) {
+            errors.push(e);
+        }
+    }
+    if let Some(ref pricing) = req.pricing {
+        if let Err(e) = validation::validate_pricing(pricing) {
+            errors.push(e);
+        }
+    }
+    if let Some(ref lat) = req.latitude {
+        if let Some(ref lng) = req.longitude {
+            if let Err(mut e) = validation::validate_lat_lng(Some(*lat), Some(*lng)) {
+                errors.append(&mut e);
+            }
+        }
+    }
+
+    if !errors.is_empty() {
+        return Err(ApiError::unprocessable_fields(
+            "VALIDATION_ERROR",
+            "Resource validation failed",
+            errors,
+        ));
+    }
+
+    // Validate state transition
+    if let Some(ref new_state) = req.state {
+        validate_state_transition(&existing.state, new_state, user_role)?;
+    }
+
+    // Validate media refs
+    if let Some(ref refs) = req.media_refs {
+        if !refs.is_empty() {
+            let existing_ids = media::ids_exist(conn, refs)?;
+            if existing_ids.len() != refs.len() {
+                return Err(ApiError::unprocessable(
+                    "INVALID_MEDIA_REFS",
+                    "One or more media_refs reference non-existent media files",
+                ));
+            }
+        }
+    }
+
+    let scheduled = match req.scheduled_publish_at {
+        Some(ref s) => Some(Some(parse_scheduled_publish(&Some(s.clone()))?.unwrap())),
+        None => None,
+    };
+
+    // Create version snapshot before mutation
+    let snapshot = serde_json::json!({
+        "title": existing.title,
+        "category": existing.category,
+        "tags": existing.tags,
+        "hours": existing.hours,
+        "pricing": existing.pricing,
+        "media_refs": existing.media_refs,
+        "address": existing.address,
+        "latitude": existing.latitude,
+        "longitude": existing.longitude,
+        "state": existing.state,
+        "scheduled_publish_at": existing.scheduled_publish_at,
+    });
+
+    resources::insert_version(
+        conn,
+        &resources::NewResourceVersion {
+            resource_id: id,
+            version_number: existing.current_version,
+            snapshot,
+            changed_by: user_id,
+        },
+    )?;
+
+    let changeset = resources::ResourceUpdate {
+        title: req.title.clone(),
+        category: req.category.as_ref().map(|c| Some(c.clone())),
+        tags: req.tags.as_ref().map(|t| serde_json::json!(t)),
+        hours: req.hours.clone(),
+        pricing: req.pricing.clone(),
+        media_refs: req.media_refs.as_ref().map(|r| serde_json::json!(r)),
+        address: req.address.as_ref().map(|a| Some(a.clone())),
+        latitude: req.latitude.map(Some),
+        longitude: req.longitude.map(Some),
+        state: req.state.clone(),
+        scheduled_publish_at: scheduled,
+        current_version: Some(existing.current_version + 1),
+        updated_at: Some(Utc::now()),
+    };
+
+    let updated = resources::update(conn, id, &changeset)?;
+    Ok(row_to_response(&updated))
+}
+
+pub fn list_resources(
+    conn: &mut PgConnection,
+    query: &ResourceQuery,
+    scope_facility: Option<Uuid>,
+) -> Result<PaginatedResponse<ResourceResponse>, ApiError> {
+    let page = query.page.unwrap_or(1).max(1);
+    let per_page = query.per_page.unwrap_or(20).clamp(1, 100);
+    let offset = (page - 1) * per_page;
+
+    let sort_desc = query
+        .sort_order
+        .as_deref()
+        .map(|s| s == "desc")
+        .unwrap_or(true);
+
+    let filter = resources::ResourceFilter {
+        state: query.state.clone(),
+        category: query.category.clone(),
+        tag: query.tag.clone(),
+        created_by: scope_facility, // facility scoping uses created_by for simplicity
+        search: query.search.clone(),
+        sort_by: query.sort_by.clone().unwrap_or_else(|| "created_at".to_string()),
+        sort_desc,
+        offset,
+        limit: per_page,
+    };
+
+    let (rows, total) = resources::list_filtered(conn, &filter)?;
+
+    Ok(PaginatedResponse {
+        data: rows.iter().map(row_to_response).collect(),
+        page,
+        per_page,
+        total,
+    })
+}
+
+fn validate_state_transition(
+    current: &str,
+    new: &str,
+    role: UserRole,
+) -> Result<(), ApiError> {
+    let allowed = match (current, new) {
+        ("draft", "in_review") => role == UserRole::Publisher,
+        ("in_review", "published") => role == UserRole::Reviewer,
+        ("published", "offline") => {
+            role == UserRole::Publisher || role == UserRole::Administrator
+        }
+        ("offline", "draft") => role == UserRole::Publisher,
+        _ => false,
+    };
+
+    if !allowed {
+        Err(ApiError::unprocessable(
+            "INVALID_STATE_TRANSITION",
+            &format!(
+                "Transition from '{}' to '{}' is not allowed for role {:?}",
+                current, new, role
+            ),
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+fn parse_scheduled_publish(
+    input: &Option<String>,
+) -> Result<Option<chrono::DateTime<Utc>>, ApiError> {
+    match input {
+        None => Ok(None),
+        Some(s) => {
+            // Try parsing as NaiveDateTime then assume UTC
+            let ndt = chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S")
+                .or_else(|_| chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S"))
+                .map_err(|_| {
+                    ApiError::unprocessable(
+                        "INVALID_DATETIME",
+                        "scheduled_publish_at must be in format YYYY-MM-DDTHH:MM:SS",
+                    )
+                })?;
+            Ok(Some(ndt.and_utc()))
+        }
+    }
+}
+
+fn row_to_response(row: &resources::ResourceRow) -> ResourceResponse {
+    ResourceResponse {
+        id: row.id,
+        title: row.title.clone(),
+        category: row.category.clone(),
+        tags: row.tags.clone(),
+        hours: row.hours.clone(),
+        pricing: row.pricing.clone(),
+        media_refs: row.media_refs.clone(),
+        address: row.address.clone(),
+        latitude: row.latitude,
+        longitude: row.longitude,
+        state: row.state.clone(),
+        scheduled_publish_at: row.scheduled_publish_at,
+        current_version: row.current_version,
+        created_by: row.created_by,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+    }
+}
