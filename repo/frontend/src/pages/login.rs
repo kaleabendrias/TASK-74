@@ -3,88 +3,223 @@ use web_sys::HtmlInputElement;
 use yew::prelude::*;
 use yew_router::prelude::*;
 
-use crate::auth;
-use crate::models::LoginResponse;
+use crate::context::{AuthAction, AuthContext, ToastAction, ToastContext};
+use crate::models::{LoginRequest, ToastKind};
 use crate::router::Route;
 use crate::services::api;
 
 #[function_component(LoginPage)]
 pub fn login_page() -> Html {
+    let auth = use_context::<AuthContext>().unwrap();
+    let toasts = use_context::<ToastContext>().unwrap();
+    let nav = use_navigator().unwrap();
+
     let username = use_state(String::new);
     let password = use_state(String::new);
+    let totp_code = use_state(String::new);
+    let show_mfa = use_state(|| false);
     let error = use_state(|| Option::<String>::None);
-    let navigator = use_navigator().unwrap();
+    let field_errors = use_state(|| std::collections::HashMap::<String, String>::new());
+    let loading = use_state(|| false);
 
-    let on_username = {
+    // Redirect if already logged in
+    {
+        let auth = auth.clone();
+        let nav = nav.clone();
+        use_effect_with(auth.user.clone(), move |user| {
+            if user.is_some() {
+                nav.push(&Route::Dashboard);
+            }
+            || {}
+        });
+    }
+
+    let validate = {
         let username = username.clone();
-        Callback::from(move |e: InputEvent| {
-            let input: HtmlInputElement = e.target_unchecked_into();
-            username.set(input.value());
-        })
-    };
-
-    let on_password = {
         let password = password.clone();
-        Callback::from(move |e: InputEvent| {
-            let input: HtmlInputElement = e.target_unchecked_into();
-            password.set(input.value());
-        })
+        let field_errors = field_errors.clone();
+        move || -> bool {
+            let mut errs = std::collections::HashMap::new();
+            if username.is_empty() {
+                errs.insert("username".into(), "Username is required".into());
+            }
+            if password.is_empty() {
+                errs.insert("password".into(), "Password is required".into());
+            } else if password.len() < 4 {
+                errs.insert("password".into(), "Password must be at least 4 characters".into());
+            }
+            field_errors.set(errs.clone());
+            errs.is_empty()
+        }
     };
 
     let on_submit = {
         let username = username.clone();
         let password = password.clone();
+        let totp_code = totp_code.clone();
+        let show_mfa = show_mfa.clone();
         let error = error.clone();
-        let navigator = navigator.clone();
+        let loading = loading.clone();
+        let auth = auth.clone();
+        let toasts = toasts.clone();
+        let nav = nav.clone();
+        let field_errors = field_errors.clone();
         Callback::from(move |e: SubmitEvent| {
             e.prevent_default();
-            let u = (*username).clone();
-            let p = (*password).clone();
+            let username = username.clone();
+            let password = password.clone();
+            let totp_code = totp_code.clone();
+            let show_mfa = show_mfa.clone();
             let error = error.clone();
-            let navigator = navigator.clone();
+            let loading = loading.clone();
+            let auth = auth.clone();
+            let toasts = toasts.clone();
+            let nav = nav.clone();
+            let field_errors = field_errors.clone();
+
+            // Client-side validation
+            let mut errs = std::collections::HashMap::new();
+            if username.is_empty() {
+                errs.insert("username".into(), "Username is required".into());
+            }
+            if password.is_empty() {
+                errs.insert("password".into(), "Password is required".into());
+            } else if password.len() < 4 {
+                errs.insert("password".into(), "Password must be at least 4 characters".into());
+            }
+            field_errors.set(errs.clone());
+            if !errs.is_empty() { return; }
+
+            loading.set(true);
+            error.set(None);
+
             spawn_local(async move {
-                match api::login(&u, &p).await {
+                let req = LoginRequest {
+                    username: (*username).clone(),
+                    password: (*password).clone(),
+                    totp_code: if *show_mfa && !totp_code.is_empty() {
+                        Some((*totp_code).clone())
+                    } else {
+                        None
+                    },
+                };
+
+                match api::login(&req).await {
                     Ok(resp) => {
-                        auth::store_tokens(&resp.session_token, &resp.csrf_token);
-                        navigator.push(&Route::Dashboard);
+                        // Check if MFA challenge
+                        if resp.mfa_required == Some(true) {
+                            show_mfa.set(true);
+                            error.set(Some("Please enter your TOTP code".into()));
+                            loading.set(false);
+                            return;
+                        }
+                        // Fetch user profile
+                        api::set_csrf_token(Some(resp.csrf_token.clone()));
+                        match api::me().await {
+                            Ok(user) => {
+                                auth.dispatch(AuthAction::SetAuth {
+                                    user,
+                                    csrf_token: resp.csrf_token,
+                                });
+                                toasts.dispatch(ToastAction::Add(ToastKind::Success, "Welcome!".into()));
+                                nav.push(&Route::Dashboard);
+                            }
+                            Err(e) => {
+                                error.set(Some(format!("Failed to load profile: {}", e)));
+                            }
+                        }
                     }
                     Err(e) => {
+                        if e.contains("MFA") || e.contains("TOTP") {
+                            show_mfa.set(true);
+                        }
                         error.set(Some(e));
                     }
                 }
+                loading.set(false);
             });
         })
     };
 
+    let on_input = |setter: UseStateHandle<String>| {
+        Callback::from(move |e: InputEvent| {
+            let input: HtmlInputElement = e.target_unchecked_into();
+            setter.set(input.value());
+        })
+    };
+
+    let fe = &*field_errors;
+
     html! {
-        <div class="login-container">
-            <h1>{ "Tourism Portal" }</h1>
-            <form onsubmit={on_submit}>
-                <div class="form-group">
-                    <label for="username">{ "Username" }</label>
-                    <input
-                        id="username"
-                        type="text"
-                        oninput={on_username}
-                        value={(*username).clone()}
-                        required=true
-                    />
-                </div>
-                <div class="form-group">
-                    <label for="password">{ "Password" }</label>
-                    <input
-                        id="password"
-                        type="password"
-                        oninput={on_password}
-                        value={(*password).clone()}
-                        required=true
-                    />
-                </div>
-                <button type="submit" class="btn-primary">{ "Sign In" }</button>
-                if let Some(err) = &*error {
-                    <p class="error-msg">{ err }</p>
-                }
-            </form>
+        <div class="login-page">
+            <div class="login-card">
+                <h1>{ "Tourism Portal" }</h1>
+                <p class="subtitle">{ "Sign in to your account" }</p>
+
+                <form onsubmit={on_submit}>
+                    <div class="form-group">
+                        <label for="login-username">{ "Username" }</label>
+                        <input
+                            id="login-username"
+                            type="text"
+                            class={if fe.contains_key("username") { "error" } else { "" }}
+                            oninput={on_input(username.clone())}
+                            value={(*username).clone()}
+                            placeholder="Enter username"
+                            autocomplete="username"
+                        />
+                        { if let Some(e) = fe.get("username") {
+                            html! { <div class="field-error" id="login-username-error">{ e }</div> }
+                        } else { html!{} }}
+                    </div>
+
+                    <div class="form-group">
+                        <label for="login-password">{ "Password" }</label>
+                        <input
+                            id="login-password"
+                            type="password"
+                            class={if fe.contains_key("password") { "error" } else { "" }}
+                            oninput={on_input(password.clone())}
+                            value={(*password).clone()}
+                            placeholder="Enter password"
+                            autocomplete="current-password"
+                        />
+                        { if let Some(e) = fe.get("password") {
+                            html! { <div class="field-error" id="login-password-error">{ e }</div> }
+                        } else { html!{} }}
+                    </div>
+
+                    { if *show_mfa {
+                        html! {
+                            <div class="form-group">
+                                <label for="login-totp">{ "TOTP Code" }</label>
+                                <input
+                                    id="login-totp"
+                                    type="text"
+                                    oninput={on_input(totp_code.clone())}
+                                    value={(*totp_code).clone()}
+                                    placeholder="6-digit code"
+                                    maxlength="6"
+                                    autocomplete="one-time-code"
+                                />
+                            </div>
+                        }
+                    } else { html!{} }}
+
+                    { if let Some(ref e) = *error {
+                        html! { <div class="error-banner" id="login-error">{ e }</div> }
+                    } else { html!{} }}
+
+                    <button
+                        id="login-submit"
+                        type="submit"
+                        class="btn btn-primary btn-block"
+                        disabled={*loading}
+                    >
+                        { if *loading { "Signing in..." } else { "Sign In" } }
+                    </button>
+                </form>
+            </div>
         </div>
     }
 }

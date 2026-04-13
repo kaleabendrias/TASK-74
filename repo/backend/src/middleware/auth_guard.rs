@@ -88,16 +88,4 @@ fn extract_rbac(req: &HttpRequest) -> Result<RbacContext, ApiError> {
     })
 }
 
-/// Declarative macro for role checking in handlers.
-///
-/// Usage:
-/// ```ignore
-/// require_role!(ctx, Administrator, Publisher);
-/// ```
-/// Expands to a check that returns 403 if the user's role is not in the set.
-#[macro_export]
-macro_rules! require_role {
-    ($ctx:expr, $($role:ident),+ $(,)?) => {
-        $ctx.require_any_role(&[$( crate::model::UserRole::$role ),+])?;
-    };
-}
+// The require_role! macro is defined in lib.rs for proper crate-level export.

@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "backend",
+    "unit_tests",
+    "API_tests",
+]
+resolver = "2"

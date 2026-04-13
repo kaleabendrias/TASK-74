@@ -1,0 +1,77 @@
+version: "3.9"
+
+services:
+  test-db:
+    image: postgres:16-alpine
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: tourism
+      POSTGRES_PASSWORD: tourism_secret_2024
+      POSTGRES_DB: tourism_portal_test
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tourism -d tourism_portal_test"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    ports:
+      - "8080:8080"
+    depends_on:
+      test-db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "postgres://tourism:tourism_secret_2024@test-db:5432/tourism_portal_test"
+      TLS_CERT_PATH: "/app/certs/server.crt"
+      TLS_KEY_PATH: "/app/certs/server.key"
+      HMAC_SECRET: "test-hmac-secret"
+      REQUEST_SIGNING_KEY: "test-signing-key"
+      ARGON2_MEMORY_KIB: "4096"
+      ARGON2_ITERATIONS: "1"
+      ARGON2_PARALLELISM: "1"
+      ARGON2_OUTPUT_LEN: "32"
+      AES256_MASTER_KEY: "QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI="
+      TOTP_ISSUER: "Test"
+      CSRF_TOKEN_TTL_SECS: "3600"
+      UPLOAD_MAX_SIZE_BYTES: "52428800"
+      UPLOAD_ALLOWED_MIMES: "image/jpeg,image/png,image/webp,application/pdf"
+      FEATURE_MFA_ENABLED: "true"
+      FEATURE_CSV_IMPORT: "true"
+      FEATURE_EXPORT_WATERMARK: "true"
+      FEATURE_LODGING_DEPOSIT_CAP: "true"
+      FEATURE_CANARY_RELEASE: "false"
+      MAINTENANCE_WINDOW_CRON: "0 3 * * 0"
+      PROMETHEUS_SCRAPE_PATH: "/metrics"
+      CANARY_PROFILE: "stable"
+      CONFIG_PROFILE: "test"
+      BIND_ADDRESS: "0.0.0.0"
+      BIND_PORT: "8080"
+      RUST_LOG: "info"
+    volumes:
+      - test-uploads:/app/uploads
+
+  test-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    depends_on:
+      test-db:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    environment:
+      DATABASE_URL: "postgres://tourism:tourism_secret_2024@test-db:5432/tourism_portal_test"
+      TEST_BASE_URL: "http://backend:8080"
+      RUST_LOG: "info"
+    volumes:
+      - coverage-data:/coverage
+
+volumes:
+  test-uploads:
+  coverage-data:

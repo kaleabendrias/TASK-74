@@ -1,5 +1,5 @@
-mod auth;
 mod components;
+mod context;
 mod models;
 mod pages;
 mod router;

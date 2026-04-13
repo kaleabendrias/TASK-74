@@ -1,0 +1,40 @@
+# Test runner container
+FROM rust:1.78-bookworm
+
+RUN apt-get update && apt-get install -y \
+    libpq-dev \
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install cargo-tarpaulin for coverage
+RUN cargo install cargo-tarpaulin --locked
+
+WORKDIR /app
+
+# Copy workspace
+COPY Cargo.toml ./
+COPY backend/ ./backend/
+COPY unit_tests/ ./unit_tests/
+COPY API_tests/ ./API_tests/
+
+# Pre-build dependencies
+RUN cargo build --tests 2>/dev/null || true
+
+# Create coverage output directory
+RUN mkdir -p /coverage
+
+CMD ["bash", "-c", "\
+    echo '=== Running Unit Tests with Coverage ===' && \
+    cargo tarpaulin --workspace -p unit_tests \
+        --out xml --output-dir /coverage \
+        --skip-clean \
+        -- --test-threads=1 2>&1 | tee /coverage/unit_tests.log && \
+    mv /coverage/cobertura.xml /coverage/unit_coverage.xml && \
+    echo '=== Running API Tests with Coverage ===' && \
+    cargo tarpaulin --workspace -p api_tests \
+        --out xml --output-dir /coverage \
+        --skip-clean \
+        -- --test-threads=1 2>&1 | tee /coverage/api_tests.log && \
+    mv /coverage/cobertura.xml /coverage/api_coverage.xml && \
+    echo '=== Tests Complete ==='"]

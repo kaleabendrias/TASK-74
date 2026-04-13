@@ -1,0 +1,17 @@
+[package]
+name = "unit_tests"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tourism-backend = { path = "../backend" }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4"] }
+base64 = "0.22"
+argon2 = "0.5"
+aes-gcm = "0.10"
+totp-rs = { version = "5", features = ["gen_secret"] }
+hmac = "0.12"
+sha2 = "0.10"
+bigdecimal = { version = "0.4", features = ["serde"] }
