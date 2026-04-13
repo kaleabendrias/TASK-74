@@ -135,6 +135,10 @@ pub async fn update_resource(id: &str, req: &UpdateResourceRequest) -> Result<Re
     put_json(&format!("{}/resources/{}", BASE, id), req).await
 }
 
+pub async fn list_resource_versions(id: &str) -> Result<Vec<ResourceVersionResponse>, String> {
+    get_json(&format!("{}/resources/{}/versions", BASE, id)).await
+}
+
 // ── Lodgings ──
 pub async fn list_lodgings() -> Result<Vec<LodgingResponse>, String> {
     get_json(&format!("{}/lodgings", BASE)).await
@@ -210,6 +214,76 @@ pub async fn create_transaction(req: &CreateTransactionRequest) -> Result<Transa
 
 pub fn audit_print_url(lot_id: &str) -> String {
     format!("{}/inventory/transactions/audit-print?lot_id={}", BASE, lot_id)
+}
+
+// ── Media upload (real multipart) ──
+pub async fn upload_media(file: web_sys::File) -> Result<MediaFileResponse, String> {
+    let form = web_sys::FormData::new().map_err(|e| format!("{:?}", e))?;
+    form.append_with_blob_and_filename("file", &file, &file.name())
+        .map_err(|e| format!("{:?}", e))?;
+
+    let mut opts = web_sys::RequestInit::new();
+    opts.method("POST");
+    opts.body(Some(&form));
+
+    let url = format!("{}/media/upload", BASE);
+    let request = web_sys::Request::new_with_str_and_init(&url, &opts)
+        .map_err(|e| format!("{:?}", e))?;
+    if let Some(token) = csrf_token() {
+        request.headers().set("X-CSRF-Token", &token).ok();
+    }
+
+    let window = web_sys::window().ok_or("no window")?;
+    let resp_val = wasm_bindgen_futures::JsFuture::from(window.fetch_with_request(&request))
+        .await
+        .map_err(|e| format!("{:?}", e))?;
+    let resp: web_sys::Response = resp_val.into();
+
+    if resp.ok() {
+        let json = wasm_bindgen_futures::JsFuture::from(resp.json().map_err(|e| format!("{:?}", e))?)
+            .await
+            .map_err(|e| format!("{:?}", e))?;
+        let result: MediaFileResponse = serde_wasm_bindgen::from_value(json)
+            .map_err(|e| format!("{:?}", e))?;
+        Ok(result)
+    } else {
+        Err(format!("Upload failed: HTTP {}", resp.status()))
+    }
+}
+
+// ── Import upload (real multipart) ──
+pub async fn upload_import_file(file: web_sys::File) -> Result<ImportJobResponse, String> {
+    let form = web_sys::FormData::new().map_err(|e| format!("{:?}", e))?;
+    form.append_with_blob_and_filename("file", &file, &file.name())
+        .map_err(|e| format!("{:?}", e))?;
+
+    let mut opts = web_sys::RequestInit::new();
+    opts.method("POST");
+    opts.body(Some(&form));
+
+    let url = format!("{}/import/upload", BASE);
+    let request = web_sys::Request::new_with_str_and_init(&url, &opts)
+        .map_err(|e| format!("{:?}", e))?;
+    if let Some(token) = csrf_token() {
+        request.headers().set("X-CSRF-Token", &token).ok();
+    }
+
+    let window = web_sys::window().ok_or("no window")?;
+    let resp_val = wasm_bindgen_futures::JsFuture::from(window.fetch_with_request(&request))
+        .await
+        .map_err(|e| format!("{:?}", e))?;
+    let resp: web_sys::Response = resp_val.into();
+
+    if resp.ok() || resp.status() == 201 {
+        let json = wasm_bindgen_futures::JsFuture::from(resp.json().map_err(|e| format!("{:?}", e))?)
+            .await
+            .map_err(|e| format!("{:?}", e))?;
+        let result: ImportJobResponse = serde_wasm_bindgen::from_value(json)
+            .map_err(|e| format!("{:?}", e))?;
+        Ok(result)
+    } else {
+        Err(format!("Import upload failed: HTTP {}", resp.status()))
+    }
 }
 
 // ── Import/Export ──

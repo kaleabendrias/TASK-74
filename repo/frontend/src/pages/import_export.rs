@@ -18,6 +18,7 @@ pub fn import_export_page() -> Html {
 
     // Import state
     let import_file = use_state(|| Option::<String>::None);
+    let import_file_obj = use_state(|| Option::<File>::None);
     let import_job = use_state(|| Option::<ImportJobResponse>::None);
     let import_error = use_state(|| Option::<String>::None);
     let uploading = use_state(|| false);
@@ -53,6 +54,7 @@ pub fn import_export_page() -> Html {
 
     let on_file_select = {
         let import_file = import_file.clone();
+        let import_file_obj = import_file_obj.clone();
         let import_error = import_error.clone();
         Callback::from(move |e: Event| {
             let input: HtmlInputElement = e.target_unchecked_into();
@@ -62,9 +64,11 @@ pub fn import_export_page() -> Html {
                     if !name.ends_with(".xlsx") {
                         import_error.set(Some("Only .xlsx files are accepted".into()));
                         import_file.set(None);
+                        import_file_obj.set(None);
                     } else {
                         import_error.set(None);
                         import_file.set(Some(name));
+                        import_file_obj.set(Some(file));
                     }
                 }
             }
@@ -111,34 +115,34 @@ pub fn import_export_page() -> Html {
         let toasts = toasts.clone();
         let uploading = uploading.clone();
         let import_job = import_job.clone();
-        let import_file = import_file.clone();
+        let import_file_obj = import_file_obj.clone();
         Callback::from(move |_: MouseEvent| {
             let toasts = toasts.clone();
             let uploading = uploading.clone();
             let import_job = import_job.clone();
-            // File upload uses FormData via the backend multipart endpoint.
+            let file_obj = (*import_file_obj).clone();
             uploading.set(true);
-            toasts.dispatch(ToastAction::Add(ToastKind::Info, "Upload initiated — file will be processed by the backend".into()));
 
-            let import_job2 = import_job.clone();
-            let uploading2 = uploading.clone();
             spawn_local(async move {
-                // Submit via the backend multipart upload API
-                uploading2.set(false);
-                // Set initial job state; polling will fetch real progress from the backend
-                import_job2.set(Some(ImportJobResponse {
-                    id: "pending".into(),
-                    job_type: "xlsx_import".into(),
-                    status: "queued".into(),
-                    total_rows: 0,
-                    processed_rows: 0,
-                    progress_percent: 0,
-                    retries: 0,
-                    failure_log: None,
-                    committed: false,
-                    created_at: String::new(),
-                    updated_at: String::new(),
-                }));
+                match file_obj {
+                    Some(file) => {
+                        match api::upload_import_file(file).await {
+                            Ok(job) => {
+                                toasts.dispatch(ToastAction::Add(
+                                    ToastKind::Success, "File uploaded, processing started".into()
+                                ));
+                                import_job.set(Some(job));
+                            }
+                            Err(e) => {
+                                toasts.dispatch(ToastAction::Add(ToastKind::Error, e));
+                            }
+                        }
+                    }
+                    None => {
+                        toasts.dispatch(ToastAction::Add(ToastKind::Error, "No file selected".into()));
+                    }
+                }
+                uploading.set(false);
             });
         })
     };

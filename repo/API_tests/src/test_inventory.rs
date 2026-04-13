@@ -4,10 +4,11 @@ use crate::helpers::*;
 async fn create_lot_and_list() {
     let pool = setup_pool();
     let seed = seed_users(&pool);
-    let (session, _) = login_as(&authed_client(), "clerk").await;
+    let (session, csrf) = login_as(&authed_client(), "clerk").await;
     let c = bearer_client(&session);
 
     let resp = c.post(&format!("{}/api/inventory/lots", base_url()))
+        .header("X-CSRF-Token", &csrf)
         .json(&serde_json::json!({
             "facility_id": seed.facility_id.to_string(),
             "warehouse_id": seed.warehouse_id.to_string(),
@@ -30,10 +31,11 @@ async fn create_lot_and_list() {
 async fn reserve_success() {
     let pool = setup_pool();
     let seed = seed_users(&pool);
-    let (session, _) = login_as(&authed_client(), "clerk").await;
+    let (session, csrf) = login_as(&authed_client(), "clerk").await;
     let c = bearer_client(&session);
 
     let resp = c.post(&format!("{}/api/inventory/lots", base_url()))
+        .header("X-CSRF-Token", &csrf)
         .json(&serde_json::json!({
             "facility_id": seed.facility_id.to_string(),
             "warehouse_id": seed.warehouse_id.to_string(),
@@ -47,6 +49,7 @@ async fn reserve_success() {
     let lot_id = body["id"].as_str().unwrap();
 
     let resp = c.post(&format!("{}/api/inventory/lots/{}/reserve", base_url(), lot_id))
+        .header("X-CSRF-Token", &csrf)
         .json(&serde_json::json!({"quantity": 10}))
         .send().await.unwrap();
     assert_eq!(resp.status(), 200);
@@ -59,10 +62,11 @@ async fn reserve_success() {
 async fn over_reservation_returns_409() {
     let pool = setup_pool();
     let seed = seed_users(&pool);
-    let (session, _) = login_as(&authed_client(), "clerk").await;
+    let (session, csrf) = login_as(&authed_client(), "clerk").await;
     let c = bearer_client(&session);
 
     let resp = c.post(&format!("{}/api/inventory/lots", base_url()))
+        .header("X-CSRF-Token", &csrf)
         .json(&serde_json::json!({
             "facility_id": seed.facility_id.to_string(),
             "warehouse_id": seed.warehouse_id.to_string(),
@@ -76,6 +80,7 @@ async fn over_reservation_returns_409() {
     let lot_id = body["id"].as_str().unwrap();
 
     let resp = c.post(&format!("{}/api/inventory/lots/{}/reserve", base_url(), lot_id))
+        .header("X-CSRF-Token", &csrf)
         .json(&serde_json::json!({"quantity": 10}))
         .send().await.unwrap();
     assert_eq!(resp.status(), 409);
@@ -85,10 +90,11 @@ async fn over_reservation_returns_409() {
 async fn transaction_recorded() {
     let pool = setup_pool();
     let seed = seed_users(&pool);
-    let (session, _) = login_as(&authed_client(), "clerk").await;
+    let (session, csrf) = login_as(&authed_client(), "clerk").await;
     let c = bearer_client(&session);
 
     let resp = c.post(&format!("{}/api/inventory/lots", base_url()))
+        .header("X-CSRF-Token", &csrf)
         .json(&serde_json::json!({
             "facility_id": seed.facility_id.to_string(),
             "warehouse_id": seed.warehouse_id.to_string(),
@@ -102,6 +108,7 @@ async fn transaction_recorded() {
     let lot_id = body["id"].as_str().unwrap();
 
     let resp = c.post(&format!("{}/api/inventory/transactions", base_url()))
+        .header("X-CSRF-Token", &csrf)
         .json(&serde_json::json!({
             "lot_id": lot_id,
             "direction": "inbound",
@@ -119,10 +126,11 @@ async fn transaction_recorded() {
 async fn audit_print_returns_html() {
     let pool = setup_pool();
     let seed = seed_users(&pool);
-    let (session, _) = login_as(&authed_client(), "clerk").await;
+    let (session, csrf) = login_as(&authed_client(), "clerk").await;
     let c = bearer_client(&session);
 
     let resp = c.post(&format!("{}/api/inventory/lots", base_url()))
+        .header("X-CSRF-Token", &csrf)
         .json(&serde_json::json!({
             "facility_id": seed.facility_id.to_string(),
             "warehouse_id": seed.warehouse_id.to_string(),
@@ -148,12 +156,13 @@ async fn audit_print_returns_html() {
 async fn near_expiry_filter() {
     let pool = setup_pool();
     let seed = seed_users(&pool);
-    let (session, _) = login_as(&authed_client(), "clerk").await;
+    let (session, csrf) = login_as(&authed_client(), "clerk").await;
     let c = bearer_client(&session);
 
     // Create a lot expiring in 10 days
     let expires = (chrono::Utc::now() + chrono::Duration::days(10)).format("%Y-%m-%d").to_string();
     let resp = c.post(&format!("{}/api/inventory/lots", base_url()))
+        .header("X-CSRF-Token", &csrf)
         .json(&serde_json::json!({
             "facility_id": seed.facility_id.to_string(),
             "warehouse_id": seed.warehouse_id.to_string(),

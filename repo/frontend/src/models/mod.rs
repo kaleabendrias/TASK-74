@@ -269,6 +269,17 @@ pub struct CreateTransactionRequest {
     pub reason: Option<String>,
 }
 
+// Resource Versions
+#[derive(Debug, Clone, Deserialize)]
+pub struct ResourceVersionResponse {
+    pub id: String,
+    pub resource_id: String,
+    pub version_number: i32,
+    pub snapshot: serde_json::Value,
+    pub changed_by: String,
+    pub created_at: String,
+}
+
 // Media
 #[derive(Debug, Clone, Deserialize)]
 pub struct MediaFileResponse {

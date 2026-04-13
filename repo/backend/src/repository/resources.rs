@@ -187,3 +187,23 @@ pub fn insert_version(conn: &mut PgConnection, v: &NewResourceVersion) -> QueryR
         .values(v)
         .execute(conn)
 }
+
+#[derive(Queryable, Selectable, Debug, Clone, serde::Serialize)]
+#[diesel(table_name = resource_versions)]
+pub struct ResourceVersionRow {
+    pub id: Uuid,
+    pub resource_id: Uuid,
+    pub version_number: i32,
+    pub snapshot: serde_json::Value,
+    pub changed_by: Uuid,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Lists all version snapshots for a resource, ordered by version number descending.
+pub fn list_versions(conn: &mut PgConnection, resource_id: Uuid) -> QueryResult<Vec<ResourceVersionRow>> {
+    resource_versions::table
+        .filter(resource_versions::resource_id.eq(resource_id))
+        .order(resource_versions::version_number.desc())
+        .select(ResourceVersionRow::as_select())
+        .load(conn)
+}

@@ -86,3 +86,13 @@ pub fn create_csrf_token(conn: &mut PgConnection, new: &NewCsrfToken) -> QueryRe
         .returning(CsrfTokenRow::as_returning())
         .get_result(conn)
 }
+
+/// Finds a non-expired CSRF token by its hash, bound to a specific session.
+pub fn find_csrf_token(conn: &mut PgConnection, hash: &str, session_id: Uuid) -> QueryResult<CsrfTokenRow> {
+    csrf_tokens::table
+        .filter(csrf_tokens::token_hash.eq(hash))
+        .filter(csrf_tokens::session_id.eq(session_id))
+        .filter(csrf_tokens::expires_at.gt(Utc::now()))
+        .select(CsrfTokenRow::as_select())
+        .first(conn)
+}

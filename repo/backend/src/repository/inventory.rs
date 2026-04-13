@@ -116,6 +116,17 @@ pub struct NewTransaction {
     pub is_immutable: bool,
 }
 
+/// Adjusts a lot's quantity_on_hand by the given delta (positive for inbound, negative for outbound).
+pub fn update_lot_quantity(conn: &mut PgConnection, lot_id: Uuid, delta: i32) -> QueryResult<LotRow> {
+    diesel::update(inventory_lots::table.find(lot_id))
+        .set((
+            inventory_lots::quantity_on_hand.eq(inventory_lots::quantity_on_hand + delta),
+            inventory_lots::updated_at.eq(Utc::now()),
+        ))
+        .returning(LotRow::as_returning())
+        .get_result(conn)
+}
+
 /// Inserts a new inventory transaction record.
 pub fn insert_transaction(
     conn: &mut PgConnection,

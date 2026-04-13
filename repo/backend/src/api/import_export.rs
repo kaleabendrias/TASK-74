@@ -1,5 +1,6 @@
 use actix_multipart::Multipart;
 use actix_web::{web, HttpResponse};
+use diesel::prelude::*;
 use futures_util::StreamExt;
 use uuid::Uuid;
 
@@ -79,7 +80,7 @@ pub async fn upload_import(
 /// Retrieves the status and progress of an import job.
 pub async fn get_job(
     state: web::Data<AppState>,
-    ctx: RbacContext,
+    _ctx: RbacContext,
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse, ApiError> {
     let mut conn = state.db_pool.get()?;
@@ -119,7 +120,7 @@ pub async fn approve_export(
 /// Downloads an approved export as a watermarked JSON file.
 pub async fn download_export(
     state: web::Data<AppState>,
-    ctx: RbacContext,
+    _ctx: RbacContext,
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse, ApiError> {
     let mut conn = state.db_pool.get()?;
@@ -129,17 +130,50 @@ pub async fn download_export(
         return Err(ApiError::forbidden("Export has not been approved yet"));
     }
 
-    // Generate export data with watermark
-    let watermark = approval
-        .watermark_text
-        .as_deref()
-        .unwrap_or("no-watermark");
+    let watermark = approval.watermark_text.as_deref().unwrap_or("no-watermark");
+
+    // Query real data based on export_type
+    let data: serde_json::Value = match approval.export_type.as_str() {
+        "resources" => {
+            let rows: Vec<serde_json::Value> = diesel::sql_query(
+                "SELECT row_to_json(r) as doc FROM resources r ORDER BY created_at DESC LIMIT 1000"
+            ).load::<crate::repository::JsonRow>(&mut conn)
+            .unwrap_or_default()
+            .into_iter().map(|r| r.doc).collect();
+            serde_json::json!(rows)
+        }
+        "lodgings" => {
+            let rows: Vec<serde_json::Value> = diesel::sql_query(
+                "SELECT row_to_json(l) as doc FROM lodgings l ORDER BY created_at DESC LIMIT 1000"
+            ).load::<crate::repository::JsonRow>(&mut conn)
+            .unwrap_or_default()
+            .into_iter().map(|r| r.doc).collect();
+            serde_json::json!(rows)
+        }
+        "inventory" => {
+            let rows: Vec<serde_json::Value> = diesel::sql_query(
+                "SELECT row_to_json(i) as doc FROM inventory_lots i ORDER BY created_at DESC LIMIT 1000"
+            ).load::<crate::repository::JsonRow>(&mut conn)
+            .unwrap_or_default()
+            .into_iter().map(|r| r.doc).collect();
+            serde_json::json!(rows)
+        }
+        "transactions" => {
+            let rows: Vec<serde_json::Value> = diesel::sql_query(
+                "SELECT row_to_json(t) as doc FROM inventory_transactions t ORDER BY created_at DESC LIMIT 1000"
+            ).load::<crate::repository::JsonRow>(&mut conn)
+            .unwrap_or_default()
+            .into_iter().map(|r| r.doc).collect();
+            serde_json::json!(rows)
+        }
+        _ => serde_json::json!([]),
+    };
 
     let export_data = serde_json::json!({
         "export_type": approval.export_type,
         "generated_at": chrono::Utc::now().to_rfc3339(),
         "watermark": watermark,
-        "data": [],
+        "data": data,
     });
 
     Ok(HttpResponse::Ok()

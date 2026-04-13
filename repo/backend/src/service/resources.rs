@@ -240,6 +240,16 @@ pub fn list_resources(
     })
 }
 
+/// Lists the version history for a resource.
+pub fn list_versions(
+    conn: &mut PgConnection,
+    resource_id: Uuid,
+) -> Result<Vec<resources::ResourceVersionRow>, ApiError> {
+    // Verify the resource exists
+    resources::find_by_id(conn, resource_id)?;
+    Ok(resources::list_versions(conn, resource_id)?)
+}
+
 fn validate_state_transition(
     current: &str,
     new: &str,

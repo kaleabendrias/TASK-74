@@ -1,4 +1,5 @@
 use chrono::Utc;
+use diesel::Connection;
 use diesel::PgConnection;
 use uuid::Uuid;
 
@@ -69,27 +70,24 @@ pub fn reserve(
         ));
     }
 
-    let row = repo::reserve_quantity(conn, lot_id, quantity).map_err(|e| match e {
-        diesel::result::Error::NotFound => ApiError::conflict(
-            "Insufficient quantity on hand for reservation",
-        ),
-        _ => ApiError::from(e),
-    })?;
-
-    // Record the reservation as a transaction
-    repo::insert_transaction(
-        conn,
-        &repo::NewTransaction {
+    conn.transaction(|conn| {
+        let row = repo::reserve_quantity(conn, lot_id, quantity)?;
+        repo::insert_transaction(conn, &repo::NewTransaction {
             lot_id,
             direction: "outbound".to_string(),
             quantity,
             reason: Some("reservation".to_string()),
             performed_by: user_id,
             is_immutable: true,
-        },
-    )?;
-
-    Ok(lot_to_response(&row))
+        })?;
+        Ok(row)
+    }).map(|row| lot_to_response(&row))
+    .map_err(|e| match e {
+        diesel::result::Error::NotFound => ApiError::conflict(
+            "Insufficient quantity on hand for reservation",
+        ),
+        _ => ApiError::from(e),
+    })
 }
 
 /// Creates an inbound or outbound inventory transaction, checking quantity sufficiency for outbound.
@@ -111,27 +109,38 @@ pub fn create_transaction(
         ));
     }
 
-    // Verify lot exists
-    let lot = repo::find_lot_by_id(conn, req.lot_id)?;
+    conn.transaction(|conn| {
+        // Update lot quantity
+        let lot = repo::find_lot_by_id(conn, req.lot_id)?;
 
-    // For outbound, check sufficiency
-    if req.direction == "outbound" && lot.quantity_on_hand < req.quantity {
-        return Err(ApiError::conflict(
+        if req.direction == "outbound" && lot.quantity_on_hand < req.quantity {
+            return Err(diesel::result::Error::RollbackTransaction);
+        }
+
+        if req.direction == "outbound" {
+            repo::update_lot_quantity(conn, req.lot_id, -req.quantity)?;
+        } else {
+            repo::update_lot_quantity(conn, req.lot_id, req.quantity)?;
+        }
+
+        // Insert transaction record
+        let new = repo::NewTransaction {
+            lot_id: req.lot_id,
+            direction: req.direction.clone(),
+            quantity: req.quantity,
+            reason: req.reason.clone(),
+            performed_by: user_id,
+            is_immutable: true,
+        };
+        let row = repo::insert_transaction(conn, &new)?;
+        Ok(row)
+    }).map(|row| tx_to_response(&row))
+    .map_err(|e| match e {
+        diesel::result::Error::RollbackTransaction => ApiError::conflict(
             "Insufficient quantity on hand for outbound transaction",
-        ));
-    }
-
-    let new = repo::NewTransaction {
-        lot_id: req.lot_id,
-        direction: req.direction.clone(),
-        quantity: req.quantity,
-        reason: req.reason.clone(),
-        performed_by: user_id,
-        is_immutable: true,
-    };
-
-    let row = repo::insert_transaction(conn, &new)?;
-    Ok(tx_to_response(&row))
+        ),
+        _ => ApiError::from(e),
+    })
 }
 
 /// Lists inventory transactions matching the given filter criteria.

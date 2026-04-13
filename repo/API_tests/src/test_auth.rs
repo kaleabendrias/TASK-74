@@ -60,7 +60,7 @@ async fn me_returns_profile() {
 
 #[tokio::test]
 async fn me_without_session_returns_401() {
-    let c = reqwest::Client::new();
+    let c = reqwest::Client::builder().danger_accept_invalid_certs(true).build().unwrap();
     let resp = c.get(&format!("{}/api/auth/me", base_url()))
         .send().await.unwrap();
     assert_eq!(resp.status(), 401);
@@ -71,10 +71,11 @@ async fn logout_clears_session() {
     let pool = setup_pool();
     let _seed = seed_users(&pool);
     let c = authed_client();
-    let (session, _) = login_as(&c, "admin").await;
+    let (session, csrf) = login_as(&c, "admin").await;
     let c = bearer_client(&session);
 
     let resp = c.post(&format!("{}/api/auth/logout", base_url()))
+        .header("X-CSRF-Token", &csrf)
         .send().await.unwrap();
     assert_eq!(resp.status(), 200);
 

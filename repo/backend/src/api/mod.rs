@@ -7,6 +7,7 @@ mod media;
 mod import_export;
 mod connector;
 mod metrics;
+mod config;
 
 use actix_web::web;
 
@@ -24,6 +25,7 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
             .route("/resources", web::get().to(resources::list))
             .route("/resources/{id}", web::get().to(resources::get))
             .route("/resources/{id}", web::put().to(resources::update))
+            .route("/resources/{id}/versions", web::get().to(resources::list_versions))
             // Lodgings
             .route("/lodgings", web::post().to(lodgings::create))
             .route("/lodgings", web::get().to(lodgings::list))
@@ -83,6 +85,9 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
             )
             // Connector
             .route("/connector/inbound", web::post().to(connector::inbound))
+            // Config
+            .route("/config", web::get().to(config::list_config))
+            .route("/config", web::post().to(config::upsert_config))
             // Metrics
             .route("/metrics", web::get().to(metrics::prometheus_metrics)),
     );

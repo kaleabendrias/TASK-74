@@ -1,10 +1,11 @@
-use actix_web::{dev::Payload, web, Error, FromRequest, HttpRequest};
+use actix_web::{dev::Payload, http::Method, web, Error, FromRequest, HttpRequest};
 use std::future::{ready, Ready};
 use uuid::Uuid;
 
+use crate::crypto::hmac_sign;
 use crate::errors::ApiError;
 use crate::model::UserRole;
-use crate::repository::users;
+use crate::repository::{sessions, users};
 use crate::service::auth;
 use crate::AppState;
 
@@ -52,6 +53,37 @@ impl FromRequest for RbacContext {
     }
 }
 
+/// Paths that are exempt from CSRF validation.
+const CSRF_EXEMPT_PATHS: &[&str] = &["/api/auth/login", "/api/connector/inbound"];
+
+/// Returns `true` for HTTP methods that do not mutate state and therefore
+/// do not require a CSRF token.
+fn is_safe_method(method: &Method) -> bool {
+    matches!(*method, Method::GET | Method::HEAD | Method::OPTIONS)
+}
+
+/// Validates the CSRF token from the `X-CSRF-Token` header against the
+/// `csrf_tokens` table for the given session.
+fn validate_csrf(
+    req: &HttpRequest,
+    conn: &mut diesel::PgConnection,
+    hmac_secret: &str,
+    session_id: Uuid,
+) -> Result<(), ApiError> {
+    let csrf_raw = req
+        .headers()
+        .get("X-CSRF-Token")
+        .and_then(|v| v.to_str().ok())
+        .ok_or_else(|| ApiError::forbidden("Missing CSRF token"))?;
+
+    let csrf_hash = hmac_sign::sign(hmac_secret, csrf_raw);
+
+    sessions::find_csrf_token(conn, &csrf_hash, session_id)
+        .map_err(|_| ApiError::forbidden("Invalid or expired CSRF token"))?;
+
+    Ok(())
+}
+
 fn extract_rbac(req: &HttpRequest) -> Result<RbacContext, ApiError> {
     let state = req
         .app_data::<web::Data<AppState>>()
@@ -73,7 +105,17 @@ fn extract_rbac(req: &HttpRequest) -> Result<RbacContext, ApiError> {
 
     let mut conn = state.db_pool.get()?;
 
-    let user_id = auth::validate_session(&mut conn, &state.config, &token)?;
+    let (user_id, session_id) = auth::validate_session(&mut conn, &state.config, &token)?;
+
+    // CSRF validation for mutating requests on non-exempt paths
+    if !is_safe_method(req.method()) {
+        let path = req.path();
+        let exempt = CSRF_EXEMPT_PATHS.iter().any(|p| path == *p);
+        if !exempt {
+            validate_csrf(req, &mut conn, &state.config.auth.hmac_secret, session_id)?;
+        }
+    }
+
     let user = users::find_by_id(&mut conn, user_id)
         .map_err(|_| ApiError::unauthorized("User not found"))?;
 

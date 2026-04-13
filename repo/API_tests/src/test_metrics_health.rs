@@ -4,7 +4,7 @@ use crate::helpers::*;
 async fn health_returns_200() {
     let pool = setup_pool();
     let _seed = seed_users(&pool);
-    let c = reqwest::Client::new();
+    let c = reqwest::Client::builder().danger_accept_invalid_certs(true).build().unwrap();
 
     let resp = c.get(&format!("{}/api/health", base_url()))
         .send().await.unwrap();
@@ -39,7 +39,7 @@ async fn metrics_returns_prometheus_format() {
 
 #[tokio::test]
 async fn health_has_correct_fields() {
-    let c = reqwest::Client::new();
+    let c = reqwest::Client::builder().danger_accept_invalid_certs(true).build().unwrap();
     let resp = c.get(&format!("{}/api/health", base_url()))
         .send().await.unwrap();
     let body: serde_json::Value = resp.json().await.unwrap();

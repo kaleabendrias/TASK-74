@@ -6,9 +6,10 @@ async fn export_request_and_approve_flow() {
     let _seed = seed_users(&pool);
 
     // Request export as clerk
-    let (session, _) = login_as(&authed_client(), "clerk").await;
+    let (session, csrf) = login_as(&authed_client(), "clerk").await;
     let c = bearer_client(&session);
     let resp = c.post(&format!("{}/api/export/request", base_url()))
+        .header("X-CSRF-Token", &csrf)
         .json(&serde_json::json!({"export_type": "inventory"}))
         .send().await.unwrap();
     assert_eq!(resp.status(), 201);
@@ -22,9 +23,10 @@ async fn export_request_and_approve_flow() {
     assert_eq!(resp.status(), 403);
 
     // Approve as admin
-    let (session, _) = login_as(&authed_client(), "admin").await;
+    let (session, csrf) = login_as(&authed_client(), "admin").await;
     let c = bearer_client(&session);
     let resp = c.post(&format!("{}/api/export/approve/{}", base_url(), export_id))
+        .header("X-CSRF-Token", &csrf)
         .send().await.unwrap();
     assert_eq!(resp.status(), 200);
     let body: serde_json::Value = resp.json().await.unwrap();
@@ -43,7 +45,7 @@ async fn export_request_and_approve_flow() {
 async fn import_xlsx_only() {
     let pool = setup_pool();
     let _seed = seed_users(&pool);
-    let (session, _) = login_as(&authed_client(), "admin").await;
+    let (session, csrf) = login_as(&authed_client(), "admin").await;
     let c = bearer_client(&session);
 
     // Try uploading a non-xlsx file
@@ -53,6 +55,7 @@ async fn import_xlsx_only() {
             .mime_str("text/csv").unwrap());
 
     let resp = c.post(&format!("{}/api/import/upload", base_url()))
+        .header("X-CSRF-Token", &csrf)
         .multipart(form)
         .send().await.unwrap();
     assert_eq!(resp.status(), 422);

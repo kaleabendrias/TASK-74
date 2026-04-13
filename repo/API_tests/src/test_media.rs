@@ -19,7 +19,7 @@ fn minimal_png() -> Vec<u8> {
 async fn upload_valid_png() {
     let pool = setup_pool();
     let _seed = seed_users(&pool);
-    let (session, _) = login_as(&authed_client(), "admin").await;
+    let (session, csrf) = login_as(&authed_client(), "admin").await;
     let c = bearer_client(&session);
 
     std::fs::create_dir_all("/tmp/test_uploads").ok();
@@ -30,6 +30,7 @@ async fn upload_valid_png() {
             .mime_str("image/png").unwrap());
 
     let resp = c.post(&format!("{}/api/media/upload", base_url()))
+        .header("X-CSRF-Token", &csrf)
         .multipart(form)
         .send().await.unwrap();
     assert_eq!(resp.status(), 201);
@@ -42,7 +43,7 @@ async fn upload_valid_png() {
 async fn upload_exe_rejected() {
     let pool = setup_pool();
     let _seed = seed_users(&pool);
-    let (session, _) = login_as(&authed_client(), "admin").await;
+    let (session, csrf) = login_as(&authed_client(), "admin").await;
     let c = bearer_client(&session);
 
     let form = reqwest::multipart::Form::new()
@@ -51,6 +52,7 @@ async fn upload_exe_rejected() {
             .mime_str("application/octet-stream").unwrap());
 
     let resp = c.post(&format!("{}/api/media/upload", base_url()))
+        .header("X-CSRF-Token", &csrf)
         .multipart(form)
         .send().await.unwrap();
     assert_eq!(resp.status(), 422);
@@ -62,7 +64,7 @@ async fn upload_exe_rejected() {
 async fn upload_jpg_extension_pdf_content_rejected() {
     let pool = setup_pool();
     let _seed = seed_users(&pool);
-    let (session, _) = login_as(&authed_client(), "admin").await;
+    let (session, csrf) = login_as(&authed_client(), "admin").await;
     let c = bearer_client(&session);
 
     // PDF magic bytes with .jpg extension
@@ -73,6 +75,7 @@ async fn upload_jpg_extension_pdf_content_rejected() {
             .mime_str("image/jpeg").unwrap());
 
     let resp = c.post(&format!("{}/api/media/upload", base_url()))
+        .header("X-CSRF-Token", &csrf)
         .multipart(form)
         .send().await.unwrap();
     assert_eq!(resp.status(), 422);
@@ -84,7 +87,7 @@ async fn upload_jpg_extension_pdf_content_rejected() {
 async fn download_uploaded_file() {
     let pool = setup_pool();
     let _seed = seed_users(&pool);
-    let (session, _) = login_as(&authed_client(), "admin").await;
+    let (session, csrf) = login_as(&authed_client(), "admin").await;
     let c = bearer_client(&session);
 
     std::fs::create_dir_all("/tmp/test_uploads").ok();
@@ -95,6 +98,7 @@ async fn download_uploaded_file() {
             .mime_str("image/png").unwrap());
 
     let resp = c.post(&format!("{}/api/media/upload", base_url()))
+        .header("X-CSRF-Token", &csrf)
         .multipart(form)
         .send().await.unwrap();
     let body: serde_json::Value = resp.json().await.unwrap();

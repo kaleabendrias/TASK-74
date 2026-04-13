@@ -4,9 +4,21 @@ use uuid::Uuid;
 use crate::errors::ApiError;
 use crate::middleware::auth_guard::RbacContext;
 use crate::model::*;
+use crate::repository::inventory as repo;
 use crate::require_role;
 use crate::service::inventory as svc;
 use crate::AppState;
+
+/// Verifies that a facility-scoped user is accessing an entity that belongs
+/// to their facility. Administrators (scope_facility() == None) pass through.
+fn enforce_facility(ctx: &RbacContext, entity_facility_id: Uuid) -> Result<(), ApiError> {
+    if let Some(scoped) = ctx.scope_facility() {
+        if scoped != entity_facility_id {
+            return Err(ApiError::forbidden("Access denied: entity belongs to a different facility"));
+        }
+    }
+    Ok(())
+}
 
 /// Creates a new inventory lot.
 pub async fn create_lot(
@@ -15,6 +27,7 @@ pub async fn create_lot(
     body: web::Json<CreateLotRequest>,
 ) -> Result<HttpResponse, ApiError> {
     require_role!(ctx, Administrator, InventoryClerk);
+    enforce_facility(&ctx, body.facility_id)?;
 
     let mut conn = state.db_pool.get()?;
     let lot = svc::create_lot(&mut conn, &body)?;
@@ -31,6 +44,7 @@ pub async fn get_lot(
 
     let mut conn = state.db_pool.get()?;
     let lot = svc::get_lot(&mut conn, path.into_inner())?;
+    enforce_facility(&ctx, lot.facility_id)?;
     Ok(HttpResponse::Ok().json(lot))
 }
 
@@ -43,8 +57,9 @@ pub async fn list_lots(
     require_role!(ctx, Administrator, InventoryClerk, Clinician);
 
     let mut conn = state.db_pool.get()?;
-    // Facility scoping for Clinician/InventoryClerk
-    let facility = query.facility_id.or(ctx.scope_facility());
+    // Facility scoping: scoped users always use their own facility; only
+    // Administrators may override via the query parameter.
+    let facility = ctx.scope_facility().or(query.facility_id);
     let near_expiry = query.near_expiry.unwrap_or(false);
     let lots = svc::list_lots(&mut conn, facility, near_expiry)?;
     Ok(HttpResponse::Ok().json(lots))
@@ -59,8 +74,13 @@ pub async fn reserve(
 ) -> Result<HttpResponse, ApiError> {
     require_role!(ctx, Administrator, InventoryClerk);
 
+    let lot_id = path.into_inner();
     let mut conn = state.db_pool.get()?;
-    let lot = svc::reserve(&mut conn, path.into_inner(), body.quantity, ctx.user_id)?;
+    let row = repo::find_lot_by_id(&mut conn, lot_id)
+        .map_err(|_| ApiError::not_found("Lot"))?;
+    enforce_facility(&ctx, row.facility_id)?;
+
+    let lot = svc::reserve(&mut conn, lot_id, body.quantity, ctx.user_id)?;
     Ok(HttpResponse::Ok().json(lot))
 }
 
@@ -73,6 +93,10 @@ pub async fn create_transaction(
     require_role!(ctx, Administrator, InventoryClerk);
 
     let mut conn = state.db_pool.get()?;
+    let row = repo::find_lot_by_id(&mut conn, body.lot_id)
+        .map_err(|_| ApiError::not_found("Lot"))?;
+    enforce_facility(&ctx, row.facility_id)?;
+
     let tx = svc::create_transaction(&mut conn, &body, ctx.user_id)?;
     Ok(HttpResponse::Created().json(tx))
 }
@@ -104,6 +128,10 @@ pub async fn audit_print(
     require_role!(ctx, Administrator, InventoryClerk);
 
     let mut conn = state.db_pool.get()?;
+    let row = repo::find_lot_by_id(&mut conn, query.lot_id)
+        .map_err(|_| ApiError::not_found("Lot"))?;
+    enforce_facility(&ctx, row.facility_id)?;
+
     let html = svc::audit_print_html(&mut conn, query.lot_id)?;
     Ok(HttpResponse::Ok()
         .content_type("text/html; charset=utf-8")

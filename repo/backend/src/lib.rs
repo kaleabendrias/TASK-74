@@ -13,7 +13,6 @@ use diesel::prelude::*;
 use diesel::r2d2::{self, ConnectionManager};
 use diesel::PgConnection;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
-use std::sync::Arc;
 use std::time::Instant;
 
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");

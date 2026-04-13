@@ -18,3 +18,5 @@ mod test_import_export;
 mod test_connector;
 #[cfg(test)]
 mod test_metrics_health;
+#[cfg(test)]
+mod test_security;

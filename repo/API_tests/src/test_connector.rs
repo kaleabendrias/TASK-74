@@ -23,7 +23,7 @@ async fn connector_valid_payload() {
     let ts = &chrono::Utc::now().timestamp().to_string();
     let sig = sign_request("req-sign-key-tourism-portal-2024", body, nonce, ts);
 
-    let c = reqwest::Client::new();
+    let c = reqwest::Client::builder().danger_accept_invalid_certs(true).build().unwrap();
     let resp = c.post(&format!("{}/api/connector/inbound", base_url()))
         .header("Authorization", &sig)
         .header("X-Nonce", nonce)
@@ -46,7 +46,7 @@ async fn connector_expired_timestamp() {
     let old_ts = &(chrono::Utc::now().timestamp() - 600).to_string(); // 10 min ago
     let sig = sign_request("req-sign-key-tourism-portal-2024", body, nonce, old_ts);
 
-    let c = reqwest::Client::new();
+    let c = reqwest::Client::builder().danger_accept_invalid_certs(true).build().unwrap();
     let resp = c.post(&format!("{}/api/connector/inbound", base_url()))
         .header("Authorization", &sig)
         .header("X-Nonce", nonce)
@@ -67,7 +67,7 @@ async fn connector_replayed_nonce() {
     let ts = &chrono::Utc::now().timestamp().to_string();
     let sig = sign_request("req-sign-key-tourism-portal-2024", body, nonce, ts);
 
-    let c = reqwest::Client::new();
+    let c = reqwest::Client::builder().danger_accept_invalid_certs(true).build().unwrap();
     // First request succeeds
     let resp = c.post(&format!("{}/api/connector/inbound", base_url()))
         .header("Authorization", &sig)
@@ -98,7 +98,7 @@ async fn connector_invalid_signature() {
     let nonce = &uuid::Uuid::new_v4().to_string();
     let ts = &chrono::Utc::now().timestamp().to_string();
 
-    let c = reqwest::Client::new();
+    let c = reqwest::Client::builder().danger_accept_invalid_certs(true).build().unwrap();
     let resp = c.post(&format!("{}/api/connector/inbound", base_url()))
         .header("Authorization", "bad_signature")
         .header("X-Nonce", nonce)

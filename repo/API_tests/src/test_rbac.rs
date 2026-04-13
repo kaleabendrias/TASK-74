@@ -4,10 +4,11 @@ use crate::helpers::*;
 async fn clinician_cannot_create_lodging() {
     let pool = setup_pool();
     let _seed = seed_users(&pool);
-    let (session, _) = login_as(&authed_client(), "clinician").await;
+    let (session, csrf) = login_as(&authed_client(), "clinician").await;
     let c = bearer_client(&session);
 
     let resp = c.post(&format!("{}/api/lodgings", base_url()))
+        .header("X-CSRF-Token", &csrf)
         .json(&serde_json::json!({"name": "Test", "amenities": []}))
         .send().await.unwrap();
     assert_eq!(resp.status(), 403);
@@ -17,10 +18,11 @@ async fn clinician_cannot_create_lodging() {
 async fn admin_can_create_resource() {
     let pool = setup_pool();
     let _seed = seed_users(&pool);
-    let (session, _) = login_as(&authed_client(), "admin").await;
+    let (session, csrf) = login_as(&authed_client(), "admin").await;
     let c = bearer_client(&session);
 
     let resp = c.post(&format!("{}/api/resources", base_url()))
+        .header("X-CSRF-Token", &csrf)
         .json(&serde_json::json!({
             "title": "Test Resource",
             "address": "123 Main St",
@@ -36,12 +38,13 @@ async fn admin_can_create_resource() {
 async fn inventory_clerk_cannot_access_resources() {
     let pool = setup_pool();
     let _seed = seed_users(&pool);
-    let (session, _) = login_as(&authed_client(), "clerk").await;
+    let (session, csrf) = login_as(&authed_client(), "clerk").await;
     let c = bearer_client(&session);
 
     // InventoryClerk is not in the allowed roles for resources
     // The route guard should return 403
     let resp = c.post(&format!("{}/api/resources", base_url()))
+        .header("X-CSRF-Token", &csrf)
         .json(&serde_json::json!({
             "title": "Test", "address": "Addr", "tags": [], "hours": {}, "pricing": {}
         }))
@@ -53,7 +56,7 @@ async fn inventory_clerk_cannot_access_resources() {
 async fn reviewer_can_view_resources() {
     let pool = setup_pool();
     let _seed = seed_users(&pool);
-    let (session, _) = login_as(&authed_client(), "reviewer").await;
+    let (session, _csrf) = login_as(&authed_client(), "reviewer").await;
     let c = bearer_client(&session);
 
     let resp = c.get(&format!("{}/api/resources", base_url()))
@@ -65,7 +68,7 @@ async fn reviewer_can_view_resources() {
 async fn clinician_can_view_inventory() {
     let pool = setup_pool();
     let _seed = seed_users(&pool);
-    let (session, _) = login_as(&authed_client(), "clinician").await;
+    let (session, _csrf) = login_as(&authed_client(), "clinician").await;
     let c = bearer_client(&session);
 
     let resp = c.get(&format!("{}/api/inventory/lots", base_url()))
@@ -77,7 +80,7 @@ async fn clinician_can_view_inventory() {
 async fn publisher_cannot_access_inventory() {
     let pool = setup_pool();
     let _seed = seed_users(&pool);
-    let (session, _) = login_as(&authed_client(), "publisher").await;
+    let (session, _csrf) = login_as(&authed_client(), "publisher").await;
     let c = bearer_client(&session);
 
     let resp = c.get(&format!("{}/api/inventory/lots", base_url()))
@@ -89,11 +92,12 @@ async fn publisher_cannot_access_inventory() {
 async fn reviewer_cannot_create_resources() {
     let pool = setup_pool();
     let _seed = seed_users(&pool);
-    let (session, _) = login_as(&authed_client(), "reviewer").await;
+    let (session, csrf) = login_as(&authed_client(), "reviewer").await;
     let c = bearer_client(&session);
 
     // Reviewer is in the allowed_roles for update but not create (which requires Admin|Publisher)
     let resp = c.post(&format!("{}/api/resources", base_url()))
+        .header("X-CSRF-Token", &csrf)
         .json(&serde_json::json!({
             "title": "Test", "address": "Addr", "tags": [], "hours": {}, "pricing": {}
         }))

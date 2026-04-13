@@ -5,7 +5,6 @@ use uuid::Uuid;
 use crate::config::AppConfig;
 use crate::crypto::{argon2id, csrf, hmac_sign, totp};
 use crate::errors::ApiError;
-use crate::model::UserRole;
 use crate::repository::{sessions, users};
 
 pub struct AuthenticatedSession {
@@ -80,16 +79,16 @@ pub fn login(
     })
 }
 
-/// Validates a session token and returns the associated user ID.
+/// Validates a session token and returns `(user_id, session_id)`.
 pub fn validate_session(
     conn: &mut PgConnection,
     config: &AppConfig,
     token: &str,
-) -> Result<Uuid, ApiError> {
+) -> Result<(Uuid, Uuid), ApiError> {
     let token_hash = hmac_sign::sign(&config.auth.hmac_secret, token);
     let session = sessions::find_session_by_token_hash(conn, &token_hash)
         .map_err(|_| ApiError::unauthorized("Invalid or expired session"))?;
-    Ok(session.user_id)
+    Ok((session.user_id, session.id))
 }
 
 /// Invalidates the session associated with the given token.

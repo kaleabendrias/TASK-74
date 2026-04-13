@@ -4,9 +4,25 @@ use uuid::Uuid;
 use crate::errors::ApiError;
 use crate::middleware::auth_guard::RbacContext;
 use crate::model::*;
+use crate::repository::lodgings as lodging_repo;
 use crate::require_role;
 use crate::service::lodgings as svc;
 use crate::AppState;
+
+/// Verifies that a facility-scoped user is accessing a lodging that belongs
+/// to their facility. Administrators (scope_facility() == None) pass through.
+/// Lodgings with no facility_id are accessible to everyone.
+fn enforce_lodging_facility(ctx: &RbacContext, lodging_facility_id: Option<Uuid>) -> Result<(), ApiError> {
+    if let Some(scoped) = ctx.scope_facility() {
+        match lodging_facility_id {
+            Some(fid) if fid != scoped => {
+                return Err(ApiError::forbidden("Access denied: lodging belongs to a different facility"));
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
 
 /// Creates a new lodging entry (requires Administrator or Publisher role).
 pub async fn create(
@@ -24,11 +40,16 @@ pub async fn create(
 /// Retrieves a single lodging by its ID.
 pub async fn get(
     state: web::Data<AppState>,
-    _ctx: RbacContext,
+    ctx: RbacContext,
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse, ApiError> {
+    let lodging_id = path.into_inner();
     let mut conn = state.db_pool.get()?;
-    let lodging = svc::get_lodging(&mut conn, path.into_inner())?;
+    let row = lodging_repo::find_lodging_by_id(&mut conn, lodging_id)
+        .map_err(|_| ApiError::not_found("Lodging"))?;
+    enforce_lodging_facility(&ctx, row.facility_id)?;
+
+    let lodging = svc::get_lodging(&mut conn, lodging_id)?;
     Ok(HttpResponse::Ok().json(lodging))
 }
 
@@ -52,8 +73,13 @@ pub async fn update(
 ) -> Result<HttpResponse, ApiError> {
     require_role!(ctx, Administrator, Publisher, Reviewer);
 
+    let lodging_id = path.into_inner();
     let mut conn = state.db_pool.get()?;
-    let lodging = svc::update_lodging(&mut conn, path.into_inner(), &body, ctx.role)?;
+    let row = lodging_repo::find_lodging_by_id(&mut conn, lodging_id)
+        .map_err(|_| ApiError::not_found("Lodging"))?;
+    enforce_lodging_facility(&ctx, row.facility_id)?;
+
+    let lodging = svc::update_lodging(&mut conn, lodging_id, &body, ctx.role)?;
     Ok(HttpResponse::Ok().json(lodging))
 }
 
@@ -62,11 +88,16 @@ pub async fn update(
 /// Returns all availability periods for a lodging.
 pub async fn get_periods(
     state: web::Data<AppState>,
-    _ctx: RbacContext,
+    ctx: RbacContext,
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse, ApiError> {
+    let lodging_id = path.into_inner();
     let mut conn = state.db_pool.get()?;
-    let periods = svc::get_periods(&mut conn, path.into_inner())?;
+    let row = lodging_repo::find_lodging_by_id(&mut conn, lodging_id)
+        .map_err(|_| ApiError::not_found("Lodging"))?;
+    enforce_lodging_facility(&ctx, row.facility_id)?;
+
+    let periods = svc::get_periods(&mut conn, lodging_id)?;
     Ok(HttpResponse::Ok().json(periods))
 }
 
@@ -79,8 +110,13 @@ pub async fn upsert_period(
 ) -> Result<HttpResponse, ApiError> {
     require_role!(ctx, Administrator, Publisher);
 
+    let lodging_id = path.into_inner();
     let mut conn = state.db_pool.get()?;
-    let period = svc::upsert_period(&mut conn, path.into_inner(), &body)?;
+    let row = lodging_repo::find_lodging_by_id(&mut conn, lodging_id)
+        .map_err(|_| ApiError::not_found("Lodging"))?;
+    enforce_lodging_facility(&ctx, row.facility_id)?;
+
+    let period = svc::upsert_period(&mut conn, lodging_id, &body)?;
     Ok(HttpResponse::Created().json(period))
 }
 
@@ -95,8 +131,13 @@ pub async fn request_rent_change(
 ) -> Result<HttpResponse, ApiError> {
     require_role!(ctx, Administrator, Publisher);
 
+    let lodging_id = path.into_inner();
     let mut conn = state.db_pool.get()?;
-    let change = svc::request_rent_change(&mut conn, path.into_inner(), &body, ctx.user_id)?;
+    let row = lodging_repo::find_lodging_by_id(&mut conn, lodging_id)
+        .map_err(|_| ApiError::not_found("Lodging"))?;
+    enforce_lodging_facility(&ctx, row.facility_id)?;
+
+    let change = svc::request_rent_change(&mut conn, lodging_id, &body, ctx.user_id)?;
     Ok(HttpResponse::Created().json(change))
 }
 

@@ -12,7 +12,7 @@ name = "tourism-backend"
 path = "src/main.rs"
 
 [dependencies]
-actix-web = "=4.8.0"
+actix-web = { version = "=4.8.0", features = ["rustls-0_22"] }
 actix-rt = "2"
 actix-cors = "=0.7.0"
 actix-multipart = "=0.7.2"
@@ -45,3 +45,5 @@ futures-util = "0.3"
 prometheus = "0.13"
 sanitize-filename = "0.5"
 time = "=0.3.36"
+rustls = "=0.22.4"
+rustls-pemfile = "2"

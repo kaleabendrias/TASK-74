@@ -591,7 +591,27 @@ pub struct HistoryProps {
 
 #[function_component(ResourceHistoryPage)]
 pub fn resource_history_page(props: &HistoryProps) -> Html {
-    // Version history displays diffs from the resource_versions table.
+    let versions = use_state(|| Vec::<crate::models::ResourceVersionResponse>::new());
+    let loading = use_state(|| true);
+
+    {
+        let id = props.id.clone();
+        let versions = versions.clone();
+        let loading = loading.clone();
+        use_effect_with(id.clone(), move |id| {
+            let id = id.clone();
+            let versions = versions.clone();
+            let loading = loading.clone();
+            spawn_local(async move {
+                if let Ok(v) = api::list_resource_versions(&id).await {
+                    versions.set(v);
+                }
+                loading.set(false);
+            });
+            || {}
+        });
+    }
+
     html! {
         <RouteGuard allowed_roles={vec![UserRole::Administrator, UserRole::Publisher, UserRole::Reviewer]}>
         <>
@@ -603,13 +623,31 @@ pub fn resource_history_page(props: &HistoryProps) -> Html {
             </div>
         </div>
         <div class="card">
-            <p class="text-secondary">{ "Version history will display diffs for each version snapshot stored in resource_versions." }</p>
-            <div class="mt-4">
-                <div style="border-left:3px solid var(--color-primary);padding-left:16px;margin-bottom:16px;">
-                    <div class="text-sm text-secondary">{ "v1 — Initial creation" }</div>
-                    <div class="diff-line diff-added">{ "+ Title, Category, Address set" }</div>
-                </div>
-            </div>
+            { if *loading {
+                html! { <p class="text-secondary">{ "Loading version history..." }</p> }
+            } else if versions.is_empty() {
+                html! { <p class="text-secondary">{ "No version history yet." }</p> }
+            } else {
+                html! {
+                    <div class="mt-4">
+                        { for versions.iter().map(|v| {
+                            let snapshot = serde_json::to_string_pretty(&v.snapshot).unwrap_or_default();
+                            html! {
+                                <div key={v.id.clone()} style="border-left:3px solid var(--color-primary);padding-left:16px;margin-bottom:16px;">
+                                    <div class="flex items-center gap-3 mb-2">
+                                        <strong>{ format!("v{}", v.version_number) }</strong>
+                                        <span class="text-sm text-secondary">{ &v.created_at }</span>
+                                        <span class="text-sm text-secondary">{ format!("by {}", v.changed_by) }</span>
+                                    </div>
+                                    <pre class="text-sm" style="background:var(--color-bg);padding:8px;border-radius:4px;overflow-x:auto;max-height:300px;">
+                                        { snapshot }
+                                    </pre>
+                                </div>
+                            }
+                        })}
+                    </div>
+                }
+            }}
         </div>
         </>
         </RouteGuard>

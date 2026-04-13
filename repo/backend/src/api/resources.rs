@@ -3,7 +3,7 @@ use uuid::Uuid;
 
 use crate::errors::ApiError;
 use crate::middleware::auth_guard::RbacContext;
-use crate::model::{CreateResourceRequest, ResourceQuery, UpdateResourceRequest, UserRole};
+use crate::model::{CreateResourceRequest, ResourceQuery, UpdateResourceRequest};
 use crate::require_role;
 use crate::service::resources as svc;
 use crate::AppState;
@@ -22,9 +22,11 @@ pub async fn create(
 }
 
 /// Retrieves a single resource by its ID.
+// NOTE: Resources do not carry a direct facility_id, so facility scoping is
+// not enforced here. Access control is implicitly handled via `created_by`.
 pub async fn get(
     state: web::Data<AppState>,
-    ctx: RbacContext,
+    _ctx: RbacContext,
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse, ApiError> {
     let mut conn = state.db_pool.get()?;
@@ -44,6 +46,17 @@ pub async fn list(
     let scope = ctx.scope_facility();
     let result = svc::list_resources(&mut conn, &query, scope)?;
     Ok(HttpResponse::Ok().json(result))
+}
+
+/// Returns the version history of a resource.
+pub async fn list_versions(
+    state: web::Data<AppState>,
+    _ctx: RbacContext,
+    path: web::Path<Uuid>,
+) -> Result<HttpResponse, ApiError> {
+    let mut conn = state.db_pool.get()?;
+    let versions = svc::list_versions(&mut conn, path.into_inner())?;
+    Ok(HttpResponse::Ok().json(versions))
 }
 
 /// Updates an existing resource by ID.

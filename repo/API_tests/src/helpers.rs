@@ -189,6 +189,7 @@ pub async fn login_as(client: &reqwest::Client, username: &str) -> (String, Stri
 }
 
 /// Creates a client that injects the Bearer token into every request.
+/// Accepts self-signed certs for TLS test environments.
 pub fn bearer_client(session_token: &str) -> reqwest::Client {
     let mut headers = reqwest::header::HeaderMap::new();
     headers.insert(
@@ -197,12 +198,15 @@ pub fn bearer_client(session_token: &str) -> reqwest::Client {
     );
     reqwest::Client::builder()
         .default_headers(headers)
+        .danger_accept_invalid_certs(true)
         .build()
         .unwrap()
 }
 
+/// Creates a plain client that accepts self-signed certs.
 pub fn authed_client() -> reqwest::Client {
     reqwest::Client::builder()
+        .danger_accept_invalid_certs(true)
         .build()
         .unwrap()
 }

@@ -102,7 +102,7 @@ services:
         condition: service_started
     environment:
       DATABASE_URL: "postgres://tourism:tourism_secret_2024@db:5432/tourism_portal"
-      TEST_BASE_URL: "http://backend:8080"
+      TEST_BASE_URL: "https://backend:8080"
       RUST_LOG: "info"
     volumes:
       - coverage-data:/coverage

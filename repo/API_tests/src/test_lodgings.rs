@@ -4,10 +4,11 @@ use crate::helpers::*;
 async fn create_lodging_valid() {
     let pool = setup_pool();
     let _seed = seed_users(&pool);
-    let (session, _) = login_as(&authed_client(), "admin").await;
+    let (session, csrf) = login_as(&authed_client(), "admin").await;
     let c = bearer_client(&session);
 
     let resp = c.post(&format!("{}/api/lodgings", base_url()))
+        .header("X-CSRF-Token", &csrf)
         .json(&serde_json::json!({
             "name": "Ocean View Suite",
             "description": "A lovely suite",
@@ -26,10 +27,11 @@ async fn create_lodging_valid() {
 async fn deposit_cap_at_1_50x_accepted() {
     let pool = setup_pool();
     let _seed = seed_users(&pool);
-    let (session, _) = login_as(&authed_client(), "admin").await;
+    let (session, csrf) = login_as(&authed_client(), "admin").await;
     let c = bearer_client(&session);
 
     let resp = c.post(&format!("{}/api/lodgings", base_url()))
+        .header("X-CSRF-Token", &csrf)
         .json(&serde_json::json!({
             "name": "Cap Test OK",
             "amenities": [],
@@ -44,10 +46,11 @@ async fn deposit_cap_at_1_50x_accepted() {
 async fn deposit_cap_at_1_51x_rejected() {
     let pool = setup_pool();
     let _seed = seed_users(&pool);
-    let (session, _) = login_as(&authed_client(), "admin").await;
+    let (session, csrf) = login_as(&authed_client(), "admin").await;
     let c = bearer_client(&session);
 
     let resp = c.post(&format!("{}/api/lodgings", base_url()))
+        .header("X-CSRF-Token", &csrf)
         .json(&serde_json::json!({
             "name": "Cap Test Fail",
             "amenities": [],
@@ -64,17 +67,19 @@ async fn deposit_cap_at_1_51x_rejected() {
 async fn vacancy_period_7_nights_ok() {
     let pool = setup_pool();
     let _seed = seed_users(&pool);
-    let (session, _) = login_as(&authed_client(), "admin").await;
+    let (session, csrf) = login_as(&authed_client(), "admin").await;
     let c = bearer_client(&session);
 
     // Create lodging first
     let resp = c.post(&format!("{}/api/lodgings", base_url()))
+        .header("X-CSRF-Token", &csrf)
         .json(&serde_json::json!({"name": "Period Test", "amenities": []}))
         .send().await.unwrap();
     let body: serde_json::Value = resp.json().await.unwrap();
     let id = body["id"].as_str().unwrap();
 
     let resp = c.put(&format!("{}/api/lodgings/{}/periods", base_url(), id))
+        .header("X-CSRF-Token", &csrf)
         .json(&serde_json::json!({
             "start_date": "2025-06-01",
             "end_date": "2025-06-08",
@@ -89,16 +94,18 @@ async fn vacancy_period_7_nights_ok() {
 async fn vacancy_period_6_nights_rejected() {
     let pool = setup_pool();
     let _seed = seed_users(&pool);
-    let (session, _) = login_as(&authed_client(), "admin").await;
+    let (session, csrf) = login_as(&authed_client(), "admin").await;
     let c = bearer_client(&session);
 
     let resp = c.post(&format!("{}/api/lodgings", base_url()))
+        .header("X-CSRF-Token", &csrf)
         .json(&serde_json::json!({"name": "Period Fail", "amenities": []}))
         .send().await.unwrap();
     let body: serde_json::Value = resp.json().await.unwrap();
     let id = body["id"].as_str().unwrap();
 
     let resp = c.put(&format!("{}/api/lodgings/{}/periods", base_url(), id))
+        .header("X-CSRF-Token", &csrf)
         .json(&serde_json::json!({
             "start_date": "2025-06-01",
             "end_date": "2025-06-08",
@@ -113,16 +120,18 @@ async fn vacancy_period_6_nights_rejected() {
 async fn vacancy_period_366_nights_rejected() {
     let pool = setup_pool();
     let _seed = seed_users(&pool);
-    let (session, _) = login_as(&authed_client(), "admin").await;
+    let (session, csrf) = login_as(&authed_client(), "admin").await;
     let c = bearer_client(&session);
 
     let resp = c.post(&format!("{}/api/lodgings", base_url()))
+        .header("X-CSRF-Token", &csrf)
         .json(&serde_json::json!({"name": "Long Period", "amenities": []}))
         .send().await.unwrap();
     let body: serde_json::Value = resp.json().await.unwrap();
     let id = body["id"].as_str().unwrap();
 
     let resp = c.put(&format!("{}/api/lodgings/{}/periods", base_url(), id))
+        .header("X-CSRF-Token", &csrf)
         .json(&serde_json::json!({
             "start_date": "2025-06-01",
             "end_date": "2025-06-08",
@@ -137,10 +146,11 @@ async fn vacancy_period_366_nights_rejected() {
 async fn vacancy_period_overlap_rejected() {
     let pool = setup_pool();
     let _seed = seed_users(&pool);
-    let (session, _) = login_as(&authed_client(), "admin").await;
+    let (session, csrf) = login_as(&authed_client(), "admin").await;
     let c = bearer_client(&session);
 
     let resp = c.post(&format!("{}/api/lodgings", base_url()))
+        .header("X-CSRF-Token", &csrf)
         .json(&serde_json::json!({"name": "Overlap Test", "amenities": []}))
         .send().await.unwrap();
     let body: serde_json::Value = resp.json().await.unwrap();
@@ -148,12 +158,14 @@ async fn vacancy_period_overlap_rejected() {
 
     // First period
     let resp = c.put(&format!("{}/api/lodgings/{}/periods", base_url(), id))
+        .header("X-CSRF-Token", &csrf)
         .json(&serde_json::json!({"start_date":"2025-06-01","end_date":"2025-06-15","min_nights":7,"max_nights":365}))
         .send().await.unwrap();
     assert_eq!(resp.status(), 201);
 
     // Overlapping period
     let resp = c.put(&format!("{}/api/lodgings/{}/periods", base_url(), id))
+        .header("X-CSRF-Token", &csrf)
         .json(&serde_json::json!({"start_date":"2025-06-10","end_date":"2025-06-25","min_nights":7,"max_nights":365}))
         .send().await.unwrap();
     assert_eq!(resp.status(), 409);
@@ -165,10 +177,11 @@ async fn rent_change_approve_lifecycle() {
     let _seed = seed_users(&pool);
 
     // Create lodging as publisher
-    let (session, _) = login_as(&authed_client(), "publisher").await;
+    let (session, csrf) = login_as(&authed_client(), "publisher").await;
     let c = bearer_client(&session);
 
     let resp = c.post(&format!("{}/api/lodgings", base_url()))
+        .header("X-CSRF-Token", &csrf)
         .json(&serde_json::json!({"name":"Rent Change Test","amenities":[],"monthly_rent":1000.0,"deposit_amount":1000.0}))
         .send().await.unwrap();
     let body: serde_json::Value = resp.json().await.unwrap();
@@ -176,6 +189,7 @@ async fn rent_change_approve_lifecycle() {
 
     // Request rent change
     let resp = c.put(&format!("{}/api/lodgings/{}/rent-change", base_url(), lid))
+        .header("X-CSRF-Token", &csrf)
         .json(&serde_json::json!({"proposed_rent":1200.0,"proposed_deposit":1500.0}))
         .send().await.unwrap();
     assert_eq!(resp.status(), 201);
@@ -184,9 +198,10 @@ async fn rent_change_approve_lifecycle() {
     assert_eq!(body["status"], "pending");
 
     // Approve as reviewer
-    let (session, _) = login_as(&authed_client(), "reviewer").await;
+    let (session, csrf) = login_as(&authed_client(), "reviewer").await;
     let c = bearer_client(&session);
     let resp = c.post(&format!("{}/api/lodgings/{}/rent-change/{}/approve", base_url(), lid, change_id))
+        .header("X-CSRF-Token", &csrf)
         .send().await.unwrap();
     assert_eq!(resp.status(), 200);
     let body: serde_json::Value = resp.json().await.unwrap();
