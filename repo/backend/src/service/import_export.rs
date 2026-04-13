@@ -5,6 +5,7 @@ use crate::errors::ApiError;
 use crate::model::*;
 use crate::repository::{export as export_repo, import_jobs as repo};
 
+/// Creates a new queued import job for the given file path and job type.
 pub fn create_import_job(
     conn: &mut PgConnection,
     file_path: &str,
@@ -22,6 +23,7 @@ pub fn create_import_job(
     Ok(job_to_response(&row))
 }
 
+/// Retrieves an import job's current status and progress by ID.
 pub fn get_import_job(
     conn: &mut PgConnection,
     id: Uuid,
@@ -30,6 +32,7 @@ pub fn get_import_job(
     Ok(job_to_response(&row))
 }
 
+/// Creates a pending export approval request for the specified export type.
 pub fn create_export_request(
     conn: &mut PgConnection,
     export_type: &str,
@@ -45,6 +48,7 @@ pub fn create_export_request(
     Ok(approval_to_response(&row))
 }
 
+/// Approves a pending export request, enforcing that the approver differs from the requester.
 pub fn approve_export(
     conn: &mut PgConnection,
     id: Uuid,
@@ -69,6 +73,7 @@ pub fn approve_export(
     Ok(approval_to_response(&row))
 }
 
+/// Retrieves an export approval record by ID.
 pub fn get_export_approval(
     conn: &mut PgConnection,
     id: Uuid,

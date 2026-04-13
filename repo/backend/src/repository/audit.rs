@@ -14,6 +14,7 @@ pub struct NewAuditEntry<'a> {
     pub ip_address: Option<&'a str>,
 }
 
+/// Inserts a new entry into the audit log.
 pub fn insert(conn: &mut PgConnection, entry: &NewAuditEntry) -> QueryResult<usize> {
     diesel::insert_into(audit_log::table)
         .values(entry)

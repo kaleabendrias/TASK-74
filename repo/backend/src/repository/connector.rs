@@ -6,6 +6,7 @@ use crate::schema::{idempotency_keys, api_connector_logs};
 
 // ── Idempotency Keys ──
 
+/// Checks whether an idempotency nonce already exists in the database.
 pub fn nonce_exists(conn: &mut PgConnection, nonce: &str) -> QueryResult<bool> {
     use diesel::dsl::exists;
     diesel::select(exists(
@@ -22,6 +23,7 @@ pub struct NewIdempotencyKey<'a> {
     pub entity_id: Uuid,
 }
 
+/// Inserts a new idempotency key to prevent duplicate processing.
 pub fn insert_idempotency_key(
     conn: &mut PgConnection,
     new: &NewIdempotencyKey,
@@ -44,6 +46,7 @@ pub struct NewConnectorLog<'a> {
     pub status: &'a str,
 }
 
+/// Inserts a log entry for an API connector request or response.
 pub fn insert_connector_log(
     conn: &mut PgConnection,
     new: &NewConnectorLog,

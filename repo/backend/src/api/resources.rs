@@ -9,6 +9,7 @@ use crate::require_role;
 use crate::service::resources as svc;
 use crate::AppState;
 
+/// Creates a new resource entry (requires Administrator or Publisher role).
 pub async fn create(
     state: web::Data<Arc<AppState>>,
     ctx: RbacContext,
@@ -21,6 +22,7 @@ pub async fn create(
     Ok(HttpResponse::Created().json(resource))
 }
 
+/// Retrieves a single resource by its ID.
 pub async fn get(
     state: web::Data<Arc<AppState>>,
     ctx: RbacContext,
@@ -31,6 +33,7 @@ pub async fn get(
     Ok(HttpResponse::Ok().json(resource))
 }
 
+/// Lists resources with optional filtering and facility-scoped access.
 pub async fn list(
     state: web::Data<Arc<AppState>>,
     ctx: RbacContext,
@@ -44,6 +47,7 @@ pub async fn list(
     Ok(HttpResponse::Ok().json(result))
 }
 
+/// Updates an existing resource by ID.
 pub async fn update(
     state: web::Data<Arc<AppState>>,
     ctx: RbacContext,

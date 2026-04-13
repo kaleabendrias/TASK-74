@@ -33,6 +33,7 @@ pub struct NewImportJob<'a> {
     pub created_by: Uuid,
 }
 
+/// Inserts a new import job into the database.
 pub fn insert_job(conn: &mut PgConnection, new: &NewImportJob) -> QueryResult<ImportJobRow> {
     diesel::insert_into(import_jobs::table)
         .values(new)
@@ -40,6 +41,7 @@ pub fn insert_job(conn: &mut PgConnection, new: &NewImportJob) -> QueryResult<Im
         .get_result(conn)
 }
 
+/// Finds an import job by its unique ID.
 pub fn find_job(conn: &mut PgConnection, id: Uuid) -> QueryResult<ImportJobRow> {
     import_jobs::table
         .find(id)
@@ -47,6 +49,7 @@ pub fn find_job(conn: &mut PgConnection, id: Uuid) -> QueryResult<ImportJobRow> 
         .first(conn)
 }
 
+/// Retrieves up to `limit` queued import jobs ordered by creation time.
 pub fn find_queued_jobs(conn: &mut PgConnection, limit: i64) -> QueryResult<Vec<ImportJobRow>> {
     import_jobs::table
         .filter(import_jobs::status.eq("queued"))
@@ -56,6 +59,7 @@ pub fn find_queued_jobs(conn: &mut PgConnection, limit: i64) -> QueryResult<Vec<
         .load(conn)
 }
 
+/// Updates the status of an import job.
 pub fn update_job_status(
     conn: &mut PgConnection,
     id: Uuid,
@@ -69,6 +73,7 @@ pub fn update_job_status(
         .execute(conn)
 }
 
+/// Updates the progress counters and percentage of an import job.
 pub fn update_job_progress(
     conn: &mut PgConnection,
     id: Uuid,
@@ -86,6 +91,7 @@ pub fn update_job_progress(
         .execute(conn)
 }
 
+/// Marks an import job as completed and sets its committed flag.
 pub fn mark_job_completed(conn: &mut PgConnection, id: Uuid, committed: bool) -> QueryResult<usize> {
     diesel::update(import_jobs::table.find(id))
         .set((
@@ -97,6 +103,7 @@ pub fn mark_job_completed(conn: &mut PgConnection, id: Uuid, committed: bool) ->
         .execute(conn)
 }
 
+/// Marks an import job as failed and records the failure reason.
 pub fn mark_job_failed(
     conn: &mut PgConnection,
     id: Uuid,
@@ -112,6 +119,7 @@ pub fn mark_job_failed(
         .execute(conn)
 }
 
+/// Re-queues a failed job if it has not exceeded its maximum retry count.
 pub fn requeue_failed_job(conn: &mut PgConnection, id: Uuid) -> QueryResult<usize> {
     diesel::update(
         import_jobs::table
@@ -125,6 +133,7 @@ pub fn requeue_failed_job(conn: &mut PgConnection, id: Uuid) -> QueryResult<usiz
     .execute(conn)
 }
 
+/// Counts the number of queued or currently running import jobs.
 pub fn count_queued(conn: &mut PgConnection) -> QueryResult<i64> {
     import_jobs::table
         .filter(import_jobs::status.eq_any(vec!["queued", "running"]))

@@ -1,3 +1,6 @@
+//! Administrator-only Configuration Center: feature toggles with confirmation modals,
+//! editable config parameters, maintenance window.
+
 use yew::prelude::*;
 
 use crate::components::route_guard::RouteGuard;

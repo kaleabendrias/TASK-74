@@ -1,3 +1,5 @@
+//! 403 Forbidden and 404 Not Found pages with navigation back to dashboard.
+
 use yew::prelude::*;
 use yew_router::prelude::*;
 

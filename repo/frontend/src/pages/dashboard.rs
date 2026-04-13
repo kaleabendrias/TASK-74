@@ -1,3 +1,5 @@
+//! Dashboard page showing welcome message and system health status fetched from /api/health.
+
 use wasm_bindgen_futures::spawn_local;
 use yew::prelude::*;
 

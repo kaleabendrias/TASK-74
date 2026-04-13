@@ -9,6 +9,7 @@ use crate::model::*;
 use crate::repository::lodgings as repo;
 use crate::service::validation;
 
+/// Creates a new lodging after validating name, amenities, and deposit cap.
 pub fn create_lodging(
     conn: &mut PgConnection,
     req: &CreateLodgingRequest,
@@ -59,11 +60,13 @@ pub fn create_lodging(
     Ok(row_to_response(&row))
 }
 
+/// Retrieves a single lodging by its ID.
 pub fn get_lodging(conn: &mut PgConnection, id: Uuid) -> Result<LodgingResponse, ApiError> {
     let row = repo::find_lodging_by_id(conn, id)?;
     Ok(row_to_response(&row))
 }
 
+/// Updates a lodging, re-validates amenities and deposit cap, and enforces state transitions.
 pub fn update_lodging(
     conn: &mut PgConnection,
     id: Uuid,
@@ -118,6 +121,7 @@ pub fn update_lodging(
     Ok(row_to_response(&row))
 }
 
+/// Lists lodgings, optionally filtered by facility ID.
 pub fn list_lodgings(
     conn: &mut PgConnection,
     facility_id: Option<Uuid>,
@@ -128,6 +132,7 @@ pub fn list_lodgings(
 
 // ── Periods ──
 
+/// Returns all booking periods for a given lodging.
 pub fn get_periods(
     conn: &mut PgConnection,
     lodging_id: Uuid,
@@ -138,6 +143,7 @@ pub fn get_periods(
     Ok(rows.into_iter().map(period_to_response).collect())
 }
 
+/// Creates a booking period after validating date range, night limits, and overlap constraints.
 pub fn upsert_period(
     conn: &mut PgConnection,
     lodging_id: Uuid,
@@ -190,6 +196,7 @@ pub fn upsert_period(
 
 // ── Rent Changes ──
 
+/// Submits a rent change request with proposed rent and deposit, validated against the deposit cap.
 pub fn request_rent_change(
     conn: &mut PgConnection,
     lodging_id: Uuid,
@@ -214,6 +221,7 @@ pub fn request_rent_change(
     Ok(rent_change_to_response(&row))
 }
 
+/// Approves a pending rent change and applies the new rent/deposit to the lodging.
 pub fn approve_rent_change(
     conn: &mut PgConnection,
     lodging_id: Uuid,
@@ -251,6 +259,7 @@ pub fn approve_rent_change(
     Ok(rent_change_to_response(&updated_change))
 }
 
+/// Rejects a pending rent change request.
 pub fn reject_rent_change(
     conn: &mut PgConnection,
     lodging_id: Uuid,

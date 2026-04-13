@@ -24,6 +24,7 @@ pub struct NewExportApproval<'a> {
     pub status: &'a str,
 }
 
+/// Inserts a new export approval request into the database.
 pub fn insert_approval(
     conn: &mut PgConnection,
     new: &NewExportApproval,
@@ -34,6 +35,7 @@ pub fn insert_approval(
         .get_result(conn)
 }
 
+/// Finds an export approval record by its unique ID.
 pub fn find_approval(conn: &mut PgConnection, id: Uuid) -> QueryResult<ExportApprovalRow> {
     export_approvals::table
         .find(id)
@@ -41,6 +43,7 @@ pub fn find_approval(conn: &mut PgConnection, id: Uuid) -> QueryResult<ExportApp
         .first(conn)
 }
 
+/// Approves an export request, recording the approver and watermark text.
 pub fn approve_export(
     conn: &mut PgConnection,
     id: Uuid,

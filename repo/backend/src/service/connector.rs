@@ -7,6 +7,7 @@ use crate::errors::ApiError;
 use crate::model::{ConnectorAck, ConnectorPayload};
 use crate::repository::connector as repo;
 
+/// Validates an inbound connector request (timestamp, nonce, HMAC signature) and logs it.
 pub fn validate_and_process(
     conn: &mut PgConnection,
     signing_key: &str,

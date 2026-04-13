@@ -10,6 +10,7 @@ use crate::require_role;
 use crate::service::media as svc;
 use crate::AppState;
 
+/// Handles multipart file upload and stores the media file.
 pub async fn upload(
     state: web::Data<Arc<AppState>>,
     ctx: RbacContext,
@@ -60,6 +61,7 @@ pub async fn upload(
     Ok(HttpResponse::Created().json(result))
 }
 
+/// Downloads a media file by its ID.
 pub async fn download(
     state: web::Data<Arc<AppState>>,
     _ctx: RbacContext,

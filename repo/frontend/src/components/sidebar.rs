@@ -1,3 +1,6 @@
+//! Persistent sidebar navigation with role-conditional menu items, user info footer,
+//! and responsive hamburger toggle below 768px.
+
 use yew::prelude::*;
 use yew_router::prelude::*;
 use wasm_bindgen_futures::spawn_local;

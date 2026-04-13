@@ -4,6 +4,7 @@ use aes_gcm::{
 };
 use base64::{engine::general_purpose::STANDARD, Engine};
 
+/// Encrypts plaintext using AES-256-GCM, returning nonce prepended to ciphertext.
 pub fn encrypt(plaintext: &[u8], master_key_b64: &str) -> Vec<u8> {
     let key_bytes = STANDARD.decode(master_key_b64).expect("Invalid base64 master key");
     let key = aes_gcm::Key::<Aes256Gcm>::from_slice(&key_bytes);
@@ -17,6 +18,7 @@ pub fn encrypt(plaintext: &[u8], master_key_b64: &str) -> Vec<u8> {
     result
 }
 
+/// Decrypts AES-256-GCM data (nonce + ciphertext) using the base64-encoded master key.
 pub fn decrypt(data: &[u8], master_key_b64: &str) -> Vec<u8> {
     let key_bytes = STANDARD.decode(master_key_b64).expect("Invalid base64 master key");
     let key = aes_gcm::Key::<Aes256Gcm>::from_slice(&key_bytes);

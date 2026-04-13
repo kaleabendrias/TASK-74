@@ -9,6 +9,7 @@ use crate::model::{
 use crate::repository::{media, resources};
 use crate::service::validation;
 
+/// Creates a new resource after validating all fields, media refs, and scheduling.
 pub fn create_resource(
     conn: &mut PgConnection,
     req: &CreateResourceRequest,
@@ -80,11 +81,13 @@ pub fn create_resource(
     Ok(row_to_response(&row))
 }
 
+/// Retrieves a single resource by its ID.
 pub fn get_resource(conn: &mut PgConnection, id: Uuid) -> Result<ResourceResponse, ApiError> {
     let row = resources::find_by_id(conn, id)?;
     Ok(row_to_response(&row))
 }
 
+/// Updates a resource, validates state transitions, and creates a version snapshot before mutation.
 pub fn update_resource(
     conn: &mut PgConnection,
     id: Uuid,
@@ -199,6 +202,7 @@ pub fn update_resource(
     Ok(row_to_response(&updated))
 }
 
+/// Lists resources with pagination, filtering, sorting, and optional facility scoping.
 pub fn list_resources(
     conn: &mut PgConnection,
     query: &ResourceQuery,

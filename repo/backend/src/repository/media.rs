@@ -28,6 +28,7 @@ pub struct NewMediaFile<'a> {
     pub uploaded_by: Uuid,
 }
 
+/// Inserts a new media file record into the database.
 pub fn insert(conn: &mut PgConnection, new: &NewMediaFile) -> QueryResult<MediaFileRow> {
     diesel::insert_into(media_files::table)
         .values(new)
@@ -35,6 +36,7 @@ pub fn insert(conn: &mut PgConnection, new: &NewMediaFile) -> QueryResult<MediaF
         .get_result(conn)
 }
 
+/// Finds a media file record by its unique ID.
 pub fn find_by_id(conn: &mut PgConnection, id: Uuid) -> QueryResult<MediaFileRow> {
     media_files::table
         .find(id)
@@ -42,6 +44,7 @@ pub fn find_by_id(conn: &mut PgConnection, id: Uuid) -> QueryResult<MediaFileRow
         .first(conn)
 }
 
+/// Returns the subset of provided IDs that exist in the media_files table.
 pub fn ids_exist(conn: &mut PgConnection, ids: &[Uuid]) -> QueryResult<Vec<Uuid>> {
     media_files::table
         .filter(media_files::id.eq_any(ids))

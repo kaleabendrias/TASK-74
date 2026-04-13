@@ -62,6 +62,7 @@ pub struct ResourceUpdate {
     pub updated_at: Option<DateTime<Utc>>,
 }
 
+/// Inserts a new resource into the database.
 pub fn insert(conn: &mut PgConnection, new: &NewResource) -> QueryResult<ResourceRow> {
     diesel::insert_into(resources::table)
         .values(new)
@@ -69,6 +70,7 @@ pub fn insert(conn: &mut PgConnection, new: &NewResource) -> QueryResult<Resourc
         .get_result(conn)
 }
 
+/// Finds a resource by its unique ID.
 pub fn find_by_id(conn: &mut PgConnection, rid: Uuid) -> QueryResult<ResourceRow> {
     resources::table
         .find(rid)
@@ -76,6 +78,7 @@ pub fn find_by_id(conn: &mut PgConnection, rid: Uuid) -> QueryResult<ResourceRow
         .first(conn)
 }
 
+/// Applies a partial update to a resource and returns the updated row.
 pub fn update(
     conn: &mut PgConnection,
     rid: Uuid,
@@ -99,6 +102,7 @@ pub struct ResourceFilter {
     pub limit: i64,
 }
 
+/// Lists resources matching the given filter criteria with pagination.
 pub fn list_filtered(
     conn: &mut PgConnection,
     filter: &ResourceFilter,
@@ -177,6 +181,7 @@ pub struct NewResourceVersion {
     pub changed_by: Uuid,
 }
 
+/// Inserts a new resource version snapshot for audit history.
 pub fn insert_version(conn: &mut PgConnection, v: &NewResourceVersion) -> QueryResult<usize> {
     diesel::insert_into(resource_versions::table)
         .values(v)

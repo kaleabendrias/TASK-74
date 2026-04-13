@@ -1,3 +1,6 @@
+//! Top-level App component wrapping routes in AuthProvider, ToastProvider, and BrowserRouter.
+//! Renders the sidebar shell for authenticated routes.
+
 use yew::prelude::*;
 use yew_router::prelude::*;
 

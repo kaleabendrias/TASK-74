@@ -1,5 +1,6 @@
 use crate::errors::{ApiError, FieldError};
 
+/// The canonical set of amenity identifiers accepted by the system.
 pub const ALLOWED_AMENITIES: &[&str] = &[
     "wifi", "parking", "pool", "gym", "air_conditioning", "heating",
     "kitchen", "laundry", "elevator", "wheelchair_accessible",
@@ -7,6 +8,7 @@ pub const ALLOWED_AMENITIES: &[&str] = &[
     "reception_24h", "room_service", "restaurant", "bar", "spa",
 ];
 
+/// Validates that a title is non-empty and does not exceed 200 characters.
 pub fn validate_title(title: &str) -> Result<(), FieldError> {
     if title.is_empty() {
         return Err(FieldError {
@@ -23,6 +25,7 @@ pub fn validate_title(title: &str) -> Result<(), FieldError> {
     Ok(())
 }
 
+/// Validates that the tags array does not exceed 20 items.
 pub fn validate_tags(tags: &[String]) -> Result<(), FieldError> {
     if tags.len() > 20 {
         return Err(FieldError {
@@ -33,6 +36,7 @@ pub fn validate_tags(tags: &[String]) -> Result<(), FieldError> {
     Ok(())
 }
 
+/// Validates that all pricing values in the JSON object are non-negative.
 pub fn validate_pricing(pricing: &serde_json::Value) -> Result<(), FieldError> {
     if let Some(obj) = pricing.as_object() {
         for (key, val) in obj {
@@ -49,6 +53,7 @@ pub fn validate_pricing(pricing: &serde_json::Value) -> Result<(), FieldError> {
     Ok(())
 }
 
+/// Validates that latitude is in [-90, 90] and longitude is in [-180, 180].
 pub fn validate_lat_lng(lat: Option<f64>, lng: Option<f64>) -> Result<(), Vec<FieldError>> {
     let mut errs = vec![];
     if let Some(lat) = lat {
@@ -74,6 +79,7 @@ pub fn validate_lat_lng(lat: Option<f64>, lng: Option<f64>) -> Result<(), Vec<Fi
     }
 }
 
+/// Validates that hours is either null or a JSON object mapping day names to open/close times.
 pub fn validate_hours(hours: &serde_json::Value) -> Result<(), FieldError> {
     // Accept structured JSON: {"monday": {"open": "09:00", "close": "17:00"}, ...}
     if hours.is_null() || hours.is_object() {
@@ -86,6 +92,7 @@ pub fn validate_hours(hours: &serde_json::Value) -> Result<(), FieldError> {
     }
 }
 
+/// Validates that all provided amenities are in the [`ALLOWED_AMENITIES`] set.
 pub fn validate_amenities(amenities: &[String]) -> Result<(), Vec<FieldError>> {
     let mut errs = vec![];
     for a in amenities {
@@ -103,6 +110,7 @@ pub fn validate_amenities(amenities: &[String]) -> Result<(), Vec<FieldError>> {
     }
 }
 
+/// Ensures the deposit does not exceed 1.5x the monthly rent.
 pub fn validate_deposit_cap(deposit: f64, monthly_rent: f64) -> Result<(), ApiError> {
     let cap = monthly_rent * 1.5;
     if deposit > cap {

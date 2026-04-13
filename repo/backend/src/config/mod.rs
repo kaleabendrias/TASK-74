@@ -124,6 +124,7 @@ pub struct AppMetaConfig {
 }
 
 impl AppConfig {
+    /// Loads application configuration from `config.toml` and environment variables.
     pub fn load() -> Self {
         let builder = config::Config::builder()
             .add_source(config::File::with_name("config.toml").required(false))

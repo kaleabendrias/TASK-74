@@ -5,6 +5,7 @@ use argon2::{
 
 use crate::config::Argon2Config;
 
+/// Hashes a password using Argon2id with the provided configuration parameters.
 pub fn hash_with_config(password: &str, cfg: &Argon2Config) -> String {
     let salt = SaltString::generate(&mut OsRng);
     let params = Params::new(cfg.memory_kib, cfg.iterations, cfg.parallelism, Some(cfg.output_len))
@@ -16,6 +17,7 @@ pub fn hash_with_config(password: &str, cfg: &Argon2Config) -> String {
         .to_string()
 }
 
+/// Hashes a password using Argon2id with default parameters.
 pub fn hash(password: &str) -> String {
     let salt = SaltString::generate(&mut OsRng);
     let argon2 = Argon2::default();
@@ -25,6 +27,7 @@ pub fn hash(password: &str) -> String {
         .to_string()
 }
 
+/// Verifies a plaintext password against an Argon2id hash string.
 pub fn verify(password: &str, hash: &str) -> bool {
     let parsed = match PasswordHash::new(hash) {
         Ok(h) => h,

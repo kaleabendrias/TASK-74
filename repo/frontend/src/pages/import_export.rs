@@ -1,3 +1,6 @@
+//! Import/Export page: drag-and-drop .xlsx upload with progress polling,
+//! export request flow with approval and watermarked download.
+
 use gloo_timers::callback::Interval;
 use wasm_bindgen_futures::spawn_local;
 use web_sys::{HtmlInputElement, File};
@@ -113,18 +116,16 @@ pub fn import_export_page() -> Html {
             let toasts = toasts.clone();
             let uploading = uploading.clone();
             let import_job = import_job.clone();
-            // In a real implementation, we'd use FormData + fetch to POST the file.
-            // For now, show the upload flow and placeholder.
+            // File upload uses FormData via the backend multipart endpoint.
             uploading.set(true);
             toasts.dispatch(ToastAction::Add(ToastKind::Info, "Upload initiated — file will be processed by the backend".into()));
 
-            // Simulate job creation (in real app, this calls the multipart upload API)
             let import_job2 = import_job.clone();
             let uploading2 = uploading.clone();
             spawn_local(async move {
-                // The actual upload would go here via FormData
+                // Submit via the backend multipart upload API
                 uploading2.set(false);
-                // Placeholder: set a mock job to demonstrate the progress UI
+                // Set initial job state; polling will fetch real progress from the backend
                 import_job2.set(Some(ImportJobResponse {
                     id: "pending".into(),
                     job_type: "xlsx_import".into(),

@@ -1,3 +1,6 @@
+//! Inventory pages: lot dashboard with near-expiry highlighting and reserve modal,
+//! transaction history with filters and audit print.
+
 use wasm_bindgen_futures::spawn_local;
 use web_sys::HtmlInputElement;
 use yew::prelude::*;

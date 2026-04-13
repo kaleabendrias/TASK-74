@@ -1,0 +1,12 @@
+target/
+node_modules/
+.git/
+*.md
+!README.md
+coverage_output/
+*.pem
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~

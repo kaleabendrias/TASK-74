@@ -1,0 +1,11 @@
+target/
+node_modules/
+*.pem
+coverage_output/
+*.profraw
+*.profdata
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~

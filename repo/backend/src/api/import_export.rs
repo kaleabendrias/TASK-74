@@ -11,6 +11,7 @@ use crate::require_role;
 use crate::service::import_export as svc;
 use crate::AppState;
 
+/// Uploads an .xlsx file and creates a queued import job.
 pub async fn upload_import(
     state: web::Data<Arc<AppState>>,
     ctx: RbacContext,
@@ -77,6 +78,7 @@ pub async fn upload_import(
     Ok(HttpResponse::Created().json(job))
 }
 
+/// Retrieves the status and progress of an import job.
 pub async fn get_job(
     state: web::Data<Arc<AppState>>,
     ctx: RbacContext,
@@ -87,6 +89,7 @@ pub async fn get_job(
     Ok(HttpResponse::Ok().json(job))
 }
 
+/// Creates a new export request that requires approval before download.
 pub async fn request_export(
     state: web::Data<Arc<AppState>>,
     ctx: RbacContext,
@@ -97,6 +100,7 @@ pub async fn request_export(
     Ok(HttpResponse::Created().json(approval))
 }
 
+/// Approves a pending export request with a watermark.
 pub async fn approve_export(
     state: web::Data<Arc<AppState>>,
     ctx: RbacContext,
@@ -114,6 +118,7 @@ pub async fn approve_export(
     Ok(HttpResponse::Ok().json(approval))
 }
 
+/// Downloads an approved export as a watermarked JSON file.
 pub async fn download_export(
     state: web::Data<Arc<AppState>>,
     ctx: RbacContext,

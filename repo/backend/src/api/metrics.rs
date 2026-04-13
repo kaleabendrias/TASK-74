@@ -1,5 +1,5 @@
 use actix_web::{web, HttpResponse};
-use prometheus::{Encoder, TextEncoder, IntCounter, IntGauge, Histogram, HistogramOpts, opts, register_int_counter, register_int_gauge, register_histogram};
+use prometheus::{Encoder, TextEncoder};
 use std::sync::Arc;
 
 use crate::errors::ApiError;
@@ -11,6 +11,7 @@ lazy_static_metrics! {}
 // We use prometheus global registry with lazy initialization.
 // In a real app these would be registered once at startup and shared via AppState.
 
+/// Returns Prometheus-formatted metrics including sessions, job queue depth, and uptime.
 pub async fn prometheus_metrics(
     state: web::Data<Arc<AppState>>,
 ) -> Result<HttpResponse, ApiError> {

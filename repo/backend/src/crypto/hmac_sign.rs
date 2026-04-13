@@ -3,6 +3,7 @@ use sha2::Sha256;
 
 type HmacSha256 = Hmac<Sha256>;
 
+/// Computes an HMAC-SHA256 signature for the given message and returns it as a hex string.
 pub fn sign(secret: &str, message: &str) -> String {
     let mut mac =
         HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC can take key of any size");
@@ -10,6 +11,7 @@ pub fn sign(secret: &str, message: &str) -> String {
     hex_encode(mac.finalize().into_bytes().as_slice())
 }
 
+/// Verifies an HMAC-SHA256 hex signature against the expected value for the given message.
 pub fn verify_signature(secret: &str, message: &str, signature: &str) -> bool {
     let mut mac =
         HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC can take key of any size");
@@ -21,10 +23,12 @@ pub fn verify_signature(secret: &str, message: &str, signature: &str) -> bool {
     mac.verify_slice(&sig_bytes).is_ok()
 }
 
+/// Encodes a byte slice as a lowercase hexadecimal string.
 pub fn hex_encode(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{:02x}", b)).collect()
 }
 
+/// Decodes a hexadecimal string into bytes, returning `None` if the input is invalid.
 pub fn hex_decode(s: &str) -> Option<Vec<u8>> {
     if s.len() % 2 != 0 {
         return None;

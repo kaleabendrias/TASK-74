@@ -1,3 +1,6 @@
+//! PII masking utilities: `mask_phone` renders "(415) ***-1234",
+//! `mask_email` renders "j***n@example.com".
+
 /// Mask a phone number: "(415) ***-1234"
 pub fn mask_phone(phone: &str) -> String {
     let digits: Vec<char> = phone.chars().filter(|c| c.is_ascii_digit()).collect();

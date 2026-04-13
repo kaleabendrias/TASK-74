@@ -22,6 +22,7 @@ pub struct ApiError {
 }
 
 impl ApiError {
+    /// Creates a 400 Bad Request error with the given code and message.
     pub fn bad_request(code: &str, message: &str) -> Self {
         Self {
             status: StatusCode::BAD_REQUEST,
@@ -33,6 +34,7 @@ impl ApiError {
         }
     }
 
+    /// Creates a 401 Unauthorized error.
     pub fn unauthorized(message: &str) -> Self {
         Self {
             status: StatusCode::UNAUTHORIZED,
@@ -44,6 +46,7 @@ impl ApiError {
         }
     }
 
+    /// Creates a 403 Forbidden error.
     pub fn forbidden(message: &str) -> Self {
         Self {
             status: StatusCode::FORBIDDEN,
@@ -55,6 +58,7 @@ impl ApiError {
         }
     }
 
+    /// Creates a 404 Not Found error for the specified entity type.
     pub fn not_found(entity: &str) -> Self {
         Self {
             status: StatusCode::NOT_FOUND,
@@ -66,6 +70,7 @@ impl ApiError {
         }
     }
 
+    /// Creates a 409 Conflict error.
     pub fn conflict(message: &str) -> Self {
         Self {
             status: StatusCode::CONFLICT,
@@ -77,6 +82,7 @@ impl ApiError {
         }
     }
 
+    /// Creates a 422 Unprocessable Entity error with the given code and message.
     pub fn unprocessable(code: &str, message: &str) -> Self {
         Self {
             status: StatusCode::UNPROCESSABLE_ENTITY,
@@ -88,6 +94,7 @@ impl ApiError {
         }
     }
 
+    /// Creates a 422 Unprocessable Entity error with per-field validation details.
     pub fn unprocessable_fields(code: &str, message: &str, details: Vec<FieldError>) -> Self {
         Self {
             status: StatusCode::UNPROCESSABLE_ENTITY,
@@ -99,6 +106,7 @@ impl ApiError {
         }
     }
 
+    /// Creates a 500 Internal Server Error.
     pub fn internal(message: &str) -> Self {
         Self {
             status: StatusCode::INTERNAL_SERVER_ERROR,

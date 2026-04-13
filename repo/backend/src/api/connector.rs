@@ -5,6 +5,7 @@ use crate::errors::ApiError;
 use crate::service::connector as svc;
 use crate::AppState;
 
+/// Receives and validates a signed inbound connector request.
 pub async fn inbound(
     state: web::Data<Arc<AppState>>,
     req: HttpRequest,

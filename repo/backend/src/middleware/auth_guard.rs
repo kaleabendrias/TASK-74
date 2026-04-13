@@ -30,6 +30,7 @@ impl RbacContext {
         }
     }
 
+    /// Checks that the user holds one of the specified roles, returning a forbidden error otherwise.
     pub fn require_any_role(&self, roles: &[UserRole]) -> Result<(), ApiError> {
         if roles.contains(&self.role) {
             Ok(())

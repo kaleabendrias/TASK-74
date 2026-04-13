@@ -1,3 +1,5 @@
+//! Data transfer objects mirroring all backend API request/response types.
+
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 

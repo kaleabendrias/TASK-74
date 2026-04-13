@@ -16,6 +16,7 @@ pub enum UserRole {
 }
 
 impl UserRole {
+    /// Returns the string representation of this role.
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Administrator => "Administrator",
@@ -26,6 +27,7 @@ impl UserRole {
         }
     }
 
+    /// Parses a string into a `UserRole`, returning `None` if unrecognized.
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
             "Administrator" => Some(Self::Administrator),

@@ -51,6 +51,7 @@ pub struct LodgingUpdate {
     pub updated_at: Option<DateTime<Utc>>,
 }
 
+/// Inserts a new lodging into the database.
 pub fn insert_lodging(conn: &mut PgConnection, new: &NewLodging) -> QueryResult<LodgingRow> {
     diesel::insert_into(lodgings::table)
         .values(new)
@@ -58,6 +59,7 @@ pub fn insert_lodging(conn: &mut PgConnection, new: &NewLodging) -> QueryResult<
         .get_result(conn)
 }
 
+/// Finds a lodging by its unique ID.
 pub fn find_lodging_by_id(conn: &mut PgConnection, id: Uuid) -> QueryResult<LodgingRow> {
     lodgings::table
         .find(id)
@@ -65,6 +67,7 @@ pub fn find_lodging_by_id(conn: &mut PgConnection, id: Uuid) -> QueryResult<Lodg
         .first(conn)
 }
 
+/// Applies a partial update to a lodging and returns the updated row.
 pub fn update_lodging(
     conn: &mut PgConnection,
     id: Uuid,
@@ -76,6 +79,7 @@ pub fn update_lodging(
         .get_result(conn)
 }
 
+/// Lists lodgings, optionally filtered by facility ID.
 pub fn list_lodgings(
     conn: &mut PgConnection,
     facility_id: Option<Uuid>,
@@ -112,6 +116,7 @@ pub struct NewPeriod {
     pub vacancy: bool,
 }
 
+/// Lists all availability periods for a lodging, ordered by start date.
 pub fn list_periods(conn: &mut PgConnection, lodging_id: Uuid) -> QueryResult<Vec<PeriodRow>> {
     lodging_periods::table
         .filter(lodging_periods::lodging_id.eq(lodging_id))
@@ -120,6 +125,7 @@ pub fn list_periods(conn: &mut PgConnection, lodging_id: Uuid) -> QueryResult<Ve
         .load(conn)
 }
 
+/// Inserts a new availability period for a lodging.
 pub fn insert_period(conn: &mut PgConnection, new: &NewPeriod) -> QueryResult<PeriodRow> {
     diesel::insert_into(lodging_periods::table)
         .values(new)
@@ -127,6 +133,7 @@ pub fn insert_period(conn: &mut PgConnection, new: &NewPeriod) -> QueryResult<Pe
         .get_result(conn)
 }
 
+/// Finds periods that overlap with the given date range for a lodging.
 pub fn find_overlapping_periods(
     conn: &mut PgConnection,
     lodging_id: Uuid,
@@ -167,6 +174,7 @@ pub struct NewRentChange {
     pub requested_by: Uuid,
 }
 
+/// Inserts a new rent change request for a lodging.
 pub fn insert_rent_change(
     conn: &mut PgConnection,
     new: &NewRentChange,
@@ -177,6 +185,7 @@ pub fn insert_rent_change(
         .get_result(conn)
 }
 
+/// Finds a rent change request by its ID.
 pub fn find_rent_change(
     conn: &mut PgConnection,
     id: Uuid,
@@ -187,6 +196,7 @@ pub fn find_rent_change(
         .first(conn)
 }
 
+/// Updates the status of a rent change request and records the reviewer.
 pub fn update_rent_change_status(
     conn: &mut PgConnection,
     id: Uuid,

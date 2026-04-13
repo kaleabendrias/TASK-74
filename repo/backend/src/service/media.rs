@@ -11,6 +11,7 @@ use crate::repository::media as repo;
 const ALLOWED_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "mp4"];
 const MAX_SIZE: usize = 50 * 1024 * 1024; // 50 MB
 
+/// Validates, stores, and records an uploaded media file (extension, MIME, size, checksum).
 pub fn process_upload(
     conn: &mut PgConnection,
     config: &UploadConfig,
@@ -100,6 +101,7 @@ pub fn process_upload(
     Ok(file_to_response(&row))
 }
 
+/// Retrieves a media file's metadata and raw bytes from disk by ID.
 pub fn get_file(
     conn: &mut PgConnection,
     id: Uuid,

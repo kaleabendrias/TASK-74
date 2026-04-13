@@ -1,3 +1,6 @@
+//! HTTP API client with CSRF token injection via X-CSRF-Token header.
+//! Provides typed async functions for every backend endpoint.
+
 use gloo_net::http::Request;
 use serde::de::DeserializeOwned;
 use serde::Serialize;

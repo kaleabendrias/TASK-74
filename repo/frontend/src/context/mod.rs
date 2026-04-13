@@ -1,3 +1,6 @@
+//! Application-wide contexts: AuthProvider (user profile + CSRF token in memory)
+//! and ToastProvider (notification queue with auto-dismiss).
+
 use std::rc::Rc;
 use yew::prelude::*;
 

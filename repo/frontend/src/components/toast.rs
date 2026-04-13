@@ -1,3 +1,6 @@
+//! Globally mounted toast notification container.
+//! Renders success/error/info toasts with 4-second auto-dismiss.
+
 use gloo_timers::callback::Timeout;
 use yew::prelude::*;
 

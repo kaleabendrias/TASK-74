@@ -1,3 +1,6 @@
+//! Route guard component. Props: `allowed_roles` (`Vec<UserRole>`).
+//! Renders children if user role matches, otherwise redirects to /forbidden.
+
 use yew::prelude::*;
 use yew_router::prelude::*;
 

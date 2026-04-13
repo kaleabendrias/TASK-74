@@ -1,3 +1,5 @@
+//! Application routes using yew_router. Defines all 16 navigable paths.
+
 use yew_router::prelude::*;
 
 #[derive(Clone, Routable, PartialEq, Debug)]

@@ -35,6 +35,7 @@ pub struct NewLot {
     pub expiration_date: Option<NaiveDate>,
 }
 
+/// Inserts a new inventory lot into the database.
 pub fn insert_lot(conn: &mut PgConnection, new: &NewLot) -> QueryResult<LotRow> {
     diesel::insert_into(inventory_lots::table)
         .values(new)
@@ -42,6 +43,7 @@ pub fn insert_lot(conn: &mut PgConnection, new: &NewLot) -> QueryResult<LotRow> 
         .get_result(conn)
 }
 
+/// Finds an inventory lot by its unique ID.
 pub fn find_lot_by_id(conn: &mut PgConnection, id: Uuid) -> QueryResult<LotRow> {
     inventory_lots::table
         .find(id)
@@ -49,6 +51,7 @@ pub fn find_lot_by_id(conn: &mut PgConnection, id: Uuid) -> QueryResult<LotRow> 
         .first(conn)
 }
 
+/// Lists inventory lots, optionally filtered by facility and near-expiry status.
 pub fn list_lots(
     conn: &mut PgConnection,
     facility_id: Option<Uuid>,
@@ -66,6 +69,7 @@ pub fn list_lots(
     query.order(inventory_lots::created_at.desc()).select(LotRow::as_select()).load(conn)
 }
 
+/// Atomically reserves a quantity from a lot's on-hand stock.
 pub fn reserve_quantity(
     conn: &mut PgConnection,
     lot_id: Uuid,
@@ -112,6 +116,7 @@ pub struct NewTransaction {
     pub is_immutable: bool,
 }
 
+/// Inserts a new inventory transaction record.
 pub fn insert_transaction(
     conn: &mut PgConnection,
     new: &NewTransaction,
@@ -130,6 +135,7 @@ pub struct TransactionFilter {
     pub to_date: Option<NaiveDate>,
 }
 
+/// Lists inventory transactions matching the given filter criteria.
 pub fn list_transactions(
     conn: &mut PgConnection,
     filter: &TransactionFilter,
@@ -160,7 +166,7 @@ pub fn list_transactions(
         .load(conn)
 }
 
-// Audit print: get transactions with usernames
+/// Returns transactions for a lot joined with the performing user's username.
 pub fn transactions_with_usernames(
     conn: &mut PgConnection,
     lot_id: Uuid,

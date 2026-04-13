@@ -9,6 +9,7 @@ use crate::repository::import_jobs;
 
 type DbPool = Pool<ConnectionManager<PgConnection>>;
 
+/// Spawns a background Tokio task that polls for queued import jobs and processes them.
 pub fn spawn_job_runner(pool: DbPool) {
     tokio::spawn(async move {
         let poll_interval = Duration::from_secs(10);

@@ -6,6 +6,7 @@ use crate::errors::ApiError;
 use crate::model::*;
 use crate::repository::inventory as repo;
 
+/// Creates a new inventory lot after validating item name and quantity.
 pub fn create_lot(
     conn: &mut PgConnection,
     req: &CreateLotRequest,
@@ -38,11 +39,13 @@ pub fn create_lot(
     Ok(lot_to_response(&row))
 }
 
+/// Retrieves a single inventory lot by its ID.
 pub fn get_lot(conn: &mut PgConnection, id: Uuid) -> Result<LotResponse, ApiError> {
     let row = repo::find_lot_by_id(conn, id)?;
     Ok(lot_to_response(&row))
 }
 
+/// Lists inventory lots, optionally filtered by facility and near-expiry status.
 pub fn list_lots(
     conn: &mut PgConnection,
     facility_id: Option<Uuid>,
@@ -52,6 +55,7 @@ pub fn list_lots(
     Ok(rows.iter().map(lot_to_response).collect())
 }
 
+/// Reserves a quantity from a lot and records an immutable outbound transaction.
 pub fn reserve(
     conn: &mut PgConnection,
     lot_id: Uuid,
@@ -88,6 +92,7 @@ pub fn reserve(
     Ok(lot_to_response(&row))
 }
 
+/// Creates an inbound or outbound inventory transaction, checking quantity sufficiency for outbound.
 pub fn create_transaction(
     conn: &mut PgConnection,
     req: &CreateTransactionRequest,
@@ -129,6 +134,7 @@ pub fn create_transaction(
     Ok(tx_to_response(&row))
 }
 
+/// Lists inventory transactions matching the given filter criteria.
 pub fn list_transactions(
     conn: &mut PgConnection,
     query: &TransactionQuery,
@@ -144,6 +150,7 @@ pub fn list_transactions(
     Ok(rows.iter().map(tx_to_response).collect())
 }
 
+/// Generates an HTML audit trail report for all transactions on a given lot.
 pub fn audit_print_html(
     conn: &mut PgConnection,
     lot_id: Uuid,

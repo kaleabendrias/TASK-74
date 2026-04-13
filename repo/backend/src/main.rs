@@ -4,7 +4,7 @@ use std::time::Instant;
 use tracing_actix_web::TracingLogger;
 use tracing_subscriber::EnvFilter;
 
-use tourism_backend::{api, build_pool, config, jobs, run_migrations, AppState};
+use tourism_backend::{api, build_pool, config, jobs, run_migrations, seed_defaults, AppState};
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -19,6 +19,7 @@ async fn main() -> std::io::Result<()> {
     let pool = build_pool(&cfg.database.url, cfg.database.max_connections);
 
     run_migrations(&pool);
+    seed_defaults(&pool);
     jobs::spawn_job_runner(pool.clone());
 
     let bind_addr = format!("{}:{}", cfg.server.bind_address, cfg.server.bind_port);

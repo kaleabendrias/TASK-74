@@ -7,6 +7,7 @@ use crate::model::{LoginRequest, LoginResponse, UserProfile};
 use crate::service::auth as auth_service;
 use crate::AppState;
 
+/// Authenticates a user and returns a session cookie with a CSRF token.
 pub async fn login(
     state: web::Data<Arc<AppState>>,
     body: web::Json<LoginRequest>,
@@ -42,6 +43,7 @@ pub async fn login(
         .json(response))
 }
 
+/// Logs out the current user by invalidating the session and clearing the cookie.
 pub async fn logout(
     state: web::Data<Arc<AppState>>,
     req: HttpRequest,
@@ -75,6 +77,7 @@ pub async fn logout(
         .json(serde_json::json!({"message": "Logged out"})))
 }
 
+/// Returns the profile of the currently authenticated user.
 pub async fn me(
     state: web::Data<Arc<AppState>>,
     ctx: RbacContext,

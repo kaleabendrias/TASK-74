@@ -28,6 +28,7 @@ pub struct NewUser<'a> {
     pub mfa_enabled: bool,
 }
 
+/// Finds a user by username in the database.
 pub fn find_by_username(conn: &mut PgConnection, uname: &str) -> QueryResult<UserRow> {
     users::table
         .filter(users::username.eq(uname))
@@ -35,6 +36,7 @@ pub fn find_by_username(conn: &mut PgConnection, uname: &str) -> QueryResult<Use
         .first(conn)
 }
 
+/// Finds a user by their unique ID.
 pub fn find_by_id(conn: &mut PgConnection, uid: Uuid) -> QueryResult<UserRow> {
     users::table
         .find(uid)
@@ -42,6 +44,7 @@ pub fn find_by_id(conn: &mut PgConnection, uid: Uuid) -> QueryResult<UserRow> {
         .first(conn)
 }
 
+/// Inserts a new user into the database and returns the created row.
 pub fn insert(conn: &mut PgConnection, new: &NewUser) -> QueryResult<UserRow> {
     diesel::insert_into(users::table)
         .values(new)

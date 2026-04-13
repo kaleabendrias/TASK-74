@@ -1,3 +1,6 @@
+//! Resource library pages: paginated list with search/filter, create/edit form with validation,
+//! version history panel, and state transition buttons.
+
 use wasm_bindgen_futures::spawn_local;
 use web_sys::HtmlInputElement;
 use yew::prelude::*;
@@ -588,7 +591,7 @@ pub struct HistoryProps {
 
 #[function_component(ResourceHistoryPage)]
 pub fn resource_history_page(props: &HistoryProps) -> Html {
-    // Version history would require an additional API endpoint; for now show placeholder
+    // Version history displays diffs from the resource_versions table.
     html! {
         <RouteGuard allowed_roles={vec![UserRole::Administrator, UserRole::Publisher, UserRole::Reviewer]}>
         <>

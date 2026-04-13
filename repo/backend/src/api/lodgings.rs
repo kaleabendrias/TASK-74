@@ -9,6 +9,7 @@ use crate::require_role;
 use crate::service::lodgings as svc;
 use crate::AppState;
 
+/// Creates a new lodging entry (requires Administrator or Publisher role).
 pub async fn create(
     state: web::Data<Arc<AppState>>,
     ctx: RbacContext,
@@ -21,6 +22,7 @@ pub async fn create(
     Ok(HttpResponse::Created().json(lodging))
 }
 
+/// Retrieves a single lodging by its ID.
 pub async fn get(
     state: web::Data<Arc<AppState>>,
     _ctx: RbacContext,
@@ -31,6 +33,7 @@ pub async fn get(
     Ok(HttpResponse::Ok().json(lodging))
 }
 
+/// Lists lodgings scoped to the user's facility when applicable.
 pub async fn list(
     state: web::Data<Arc<AppState>>,
     ctx: RbacContext,
@@ -41,6 +44,7 @@ pub async fn list(
     Ok(HttpResponse::Ok().json(lodgings))
 }
 
+/// Updates an existing lodging by ID.
 pub async fn update(
     state: web::Data<Arc<AppState>>,
     ctx: RbacContext,
@@ -56,6 +60,7 @@ pub async fn update(
 
 // ── Periods ──
 
+/// Returns all availability periods for a lodging.
 pub async fn get_periods(
     state: web::Data<Arc<AppState>>,
     _ctx: RbacContext,
@@ -66,6 +71,7 @@ pub async fn get_periods(
     Ok(HttpResponse::Ok().json(periods))
 }
 
+/// Creates or replaces an availability period for a lodging.
 pub async fn upsert_period(
     state: web::Data<Arc<AppState>>,
     ctx: RbacContext,
@@ -81,6 +87,7 @@ pub async fn upsert_period(
 
 // ── Rent Changes ──
 
+/// Submits a rent change request for a lodging.
 pub async fn request_rent_change(
     state: web::Data<Arc<AppState>>,
     ctx: RbacContext,
@@ -100,6 +107,7 @@ pub struct RentChangePath {
     change_id: Uuid,
 }
 
+/// Approves a pending rent change request.
 pub async fn approve_rent_change(
     state: web::Data<Arc<AppState>>,
     ctx: RbacContext,
@@ -113,6 +121,7 @@ pub async fn approve_rent_change(
     Ok(HttpResponse::Ok().json(change))
 }
 
+/// Rejects a pending rent change request.
 pub async fn reject_rent_change(
     state: web::Data<Arc<AppState>>,
     ctx: RbacContext,

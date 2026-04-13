@@ -10,6 +10,7 @@ mod metrics;
 
 use actix_web::web;
 
+/// Registers all API route handlers on the given service configuration.
 pub fn configure_routes(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("/api")

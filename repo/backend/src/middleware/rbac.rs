@@ -5,6 +5,7 @@
 
 use crate::model::UserRole;
 
+/// Returns whether the given role is permitted to perform the specified action.
 pub fn has_permission(role: UserRole, action: &str) -> bool {
     match role {
         UserRole::Administrator => true,

@@ -13,6 +13,7 @@ pub struct AuthenticatedSession {
     pub csrf_token: String,
 }
 
+/// Authenticates a user by username/password, optionally verifying TOTP, and creates a session.
 pub fn login(
     conn: &mut PgConnection,
     config: &AppConfig,
@@ -79,6 +80,7 @@ pub fn login(
     })
 }
 
+/// Validates a session token and returns the associated user ID.
 pub fn validate_session(
     conn: &mut PgConnection,
     config: &AppConfig,
@@ -90,6 +92,7 @@ pub fn validate_session(
     Ok(session.user_id)
 }
 
+/// Invalidates the session associated with the given token.
 pub fn logout(
     conn: &mut PgConnection,
     config: &AppConfig,
@@ -100,6 +103,7 @@ pub fn logout(
     Ok(())
 }
 
+/// Retrieves a user's profile by their ID.
 pub fn get_user_profile(
     conn: &mut PgConnection,
     user_id: Uuid,

@@ -1,3 +1,6 @@
+//! Lodging management pages: list view, create/edit form with amenity checkboxes,
+//! deposit cap warning, vacancy periods, and rent change requests.
+
 use wasm_bindgen_futures::spawn_local;
 use web_sys::HtmlInputElement;
 use yew::prelude::*;

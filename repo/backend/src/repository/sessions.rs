@@ -24,6 +24,7 @@ pub struct NewSession<'a> {
     pub expires_at: DateTime<Utc>,
 }
 
+/// Creates a new session record in the database.
 pub fn create_session(conn: &mut PgConnection, new: &NewSession) -> QueryResult<SessionRow> {
     diesel::insert_into(sessions::table)
         .values(new)
@@ -31,6 +32,7 @@ pub fn create_session(conn: &mut PgConnection, new: &NewSession) -> QueryResult<
         .get_result(conn)
 }
 
+/// Finds a non-expired session by its token hash.
 pub fn find_session_by_token_hash(conn: &mut PgConnection, hash: &str) -> QueryResult<SessionRow> {
     sessions::table
         .filter(sessions::token_hash.eq(hash))
@@ -39,14 +41,17 @@ pub fn find_session_by_token_hash(conn: &mut PgConnection, hash: &str) -> QueryR
         .first(conn)
 }
 
+/// Deletes a session by its primary key ID.
 pub fn delete_session(conn: &mut PgConnection, session_id: Uuid) -> QueryResult<usize> {
     diesel::delete(sessions::table.find(session_id)).execute(conn)
 }
 
+/// Deletes a session matching the given token hash.
 pub fn delete_session_by_token_hash(conn: &mut PgConnection, hash: &str) -> QueryResult<usize> {
     diesel::delete(sessions::table.filter(sessions::token_hash.eq(hash))).execute(conn)
 }
 
+/// Counts the number of non-expired active sessions.
 pub fn count_active_sessions(conn: &mut PgConnection) -> QueryResult<i64> {
     sessions::table
         .filter(sessions::expires_at.gt(Utc::now()))
@@ -74,6 +79,7 @@ pub struct NewCsrfToken<'a> {
     pub expires_at: DateTime<Utc>,
 }
 
+/// Creates a new CSRF token associated with a session.
 pub fn create_csrf_token(conn: &mut PgConnection, new: &NewCsrfToken) -> QueryResult<CsrfTokenRow> {
     diesel::insert_into(csrf_tokens::table)
         .values(new)

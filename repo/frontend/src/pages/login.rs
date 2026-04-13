@@ -1,3 +1,6 @@
+//! Login page with centered card, inline field validation, optional TOTP field on MFA challenge,
+//! CSRF token stored in context memory.
+
 use wasm_bindgen_futures::spawn_local;
 use web_sys::HtmlInputElement;
 use yew::prelude::*;

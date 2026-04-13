@@ -9,6 +9,7 @@ use crate::require_role;
 use crate::service::inventory as svc;
 use crate::AppState;
 
+/// Creates a new inventory lot.
 pub async fn create_lot(
     state: web::Data<Arc<AppState>>,
     ctx: RbacContext,
@@ -21,6 +22,7 @@ pub async fn create_lot(
     Ok(HttpResponse::Created().json(lot))
 }
 
+/// Retrieves a single inventory lot by its ID.
 pub async fn get_lot(
     state: web::Data<Arc<AppState>>,
     ctx: RbacContext,
@@ -33,6 +35,7 @@ pub async fn get_lot(
     Ok(HttpResponse::Ok().json(lot))
 }
 
+/// Lists inventory lots with optional facility and expiry filtering.
 pub async fn list_lots(
     state: web::Data<Arc<AppState>>,
     ctx: RbacContext,
@@ -48,6 +51,7 @@ pub async fn list_lots(
     Ok(HttpResponse::Ok().json(lots))
 }
 
+/// Reserves a quantity from an inventory lot's on-hand stock.
 pub async fn reserve(
     state: web::Data<Arc<AppState>>,
     ctx: RbacContext,
@@ -61,6 +65,7 @@ pub async fn reserve(
     Ok(HttpResponse::Ok().json(lot))
 }
 
+/// Records a new inventory transaction (inbound or outbound).
 pub async fn create_transaction(
     state: web::Data<Arc<AppState>>,
     ctx: RbacContext,
@@ -73,6 +78,7 @@ pub async fn create_transaction(
     Ok(HttpResponse::Created().json(tx))
 }
 
+/// Lists inventory transactions with optional filtering.
 pub async fn list_transactions(
     state: web::Data<Arc<AppState>>,
     ctx: RbacContext,
@@ -90,6 +96,7 @@ pub struct AuditPrintQuery {
     pub lot_id: Uuid,
 }
 
+/// Returns an HTML audit trail of transactions for a given lot.
 pub async fn audit_print(
     state: web::Data<Arc<AppState>>,
     ctx: RbacContext,
