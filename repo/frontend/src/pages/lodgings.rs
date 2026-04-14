@@ -134,6 +134,23 @@ pub fn lodging_form_page(props: &LodgingFormProps) -> Html {
     let proposed_rent = use_state(String::new);
     let proposed_deposit = use_state(String::new);
 
+    // Fetch pending rent changes
+    {
+        let rent_changes = rent_changes.clone();
+        let id = props.id.clone();
+        use_effect_with(id.clone(), move |id| {
+            if let Some(_lid) = id.clone() {
+                let rent_changes = rent_changes.clone();
+                spawn_local(async move {
+                    if let Ok(pending) = api::list_pending_rent_changes().await {
+                        rent_changes.set(pending);
+                    }
+                });
+            }
+            || {}
+        });
+    }
+
     // Periods
     let periods = use_state(|| Vec::<LodgingPeriodResponse>::new());
     let period_start = use_state(String::new);
@@ -476,7 +493,101 @@ pub fn lodging_form_page(props: &LodgingFormProps) -> Html {
                         </div>
                     }
                 } else { html!{} }}
-                <p class="text-secondary text-sm">{ "Pending rent change requests appear here. Reviewers can approve or reject." }</p>
+                { if rent_changes.is_empty() {
+                    html! { <p class="text-secondary text-sm">{ "No pending rent change requests." }</p> }
+                } else {
+                    html! {
+                        <table class="mt-4">
+                            <thead>
+                                <tr>
+                                    <th>{ "Proposed Rent" }</th>
+                                    <th>{ "Proposed Deposit" }</th>
+                                    <th>{ "Status" }</th>
+                                    <th>{ "Requested" }</th>
+                                    <th>{ "Actions" }</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                { for rent_changes.iter().filter(|rc| {
+                                    // Show changes for this lodging
+                                    props.id.as_ref().map(|lid| rc.lodging_id == *lid).unwrap_or(false)
+                                }).map(|rc| {
+                                    let badge = format!("badge badge-{}", rc.status);
+                                    let is_reviewer = matches!(role, Some(UserRole::Administrator) | Some(UserRole::Reviewer));
+                                    let is_pending = rc.status == "pending";
+                                    let lid = props.id.clone().unwrap_or_default();
+                                    let cid = rc.id.clone();
+                                    let lid2 = lid.clone();
+                                    let cid2 = rc.id.clone();
+                                    let toasts_a = toasts.clone();
+                                    let toasts_r = toasts.clone();
+                                    let rent_changes_a = rent_changes.clone();
+                                    let rent_changes_r = rent_changes.clone();
+                                    html! {
+                                        <tr key={rc.id.clone()}>
+                                            <td>{ format!("${:.2}", rc.proposed_rent) }</td>
+                                            <td>{ format!("${:.2}", rc.proposed_deposit) }</td>
+                                            <td><span class={badge}>{ &rc.status }</span></td>
+                                            <td class="text-sm text-secondary">{ &rc.created_at }</td>
+                                            <td>
+                                                { if is_reviewer && is_pending {
+                                                    html! {
+                                                        <div class="flex gap-2">
+                                                            <button class="btn btn-success btn-sm"
+                                                                onclick={Callback::from(move |_: MouseEvent| {
+                                                                    let lid = lid.clone();
+                                                                    let cid = cid.clone();
+                                                                    let toasts = toasts_a.clone();
+                                                                    let rent_changes = rent_changes_a.clone();
+                                                                    spawn_local(async move {
+                                                                        match api::approve_rent_change(&lid, &cid).await {
+                                                                            Ok(updated) => {
+                                                                                let mut rcs = (*rent_changes).clone();
+                                                                                if let Some(pos) = rcs.iter().position(|r| r.id == updated.id) {
+                                                                                    rcs[pos] = updated;
+                                                                                }
+                                                                                rent_changes.set(rcs);
+                                                                                toasts.dispatch(ToastAction::Add(ToastKind::Success, "Rent change approved".into()));
+                                                                            }
+                                                                            Err(e) => toasts.dispatch(ToastAction::Add(ToastKind::Error, e)),
+                                                                        }
+                                                                    });
+                                                                })}>{ "Approve" }</button>
+                                                            <button class="btn btn-danger btn-sm"
+                                                                onclick={Callback::from(move |_: MouseEvent| {
+                                                                    let lid = lid2.clone();
+                                                                    let cid = cid2.clone();
+                                                                    let toasts = toasts_r.clone();
+                                                                    let rent_changes = rent_changes_r.clone();
+                                                                    spawn_local(async move {
+                                                                        match api::reject_rent_change(&lid, &cid).await {
+                                                                            Ok(updated) => {
+                                                                                let mut rcs = (*rent_changes).clone();
+                                                                                if let Some(pos) = rcs.iter().position(|r| r.id == updated.id) {
+                                                                                    rcs[pos] = updated;
+                                                                                }
+                                                                                rent_changes.set(rcs);
+                                                                                toasts.dispatch(ToastAction::Add(ToastKind::Success, "Rent change rejected".into()));
+                                                                            }
+                                                                            Err(e) => toasts.dispatch(ToastAction::Add(ToastKind::Error, e)),
+                                                                        }
+                                                                    });
+                                                                })}>{ "Reject" }</button>
+                                                        </div>
+                                                    }
+                                                } else if !is_pending {
+                                                    html! { <span class="text-sm text-secondary">{ &rc.status }</span> }
+                                                } else {
+                                                    html! { <span class="text-sm text-secondary">{ "Awaiting review" }</span> }
+                                                }}
+                                            </td>
+                                        </tr>
+                                    }
+                                })}
+                            </tbody>
+                        </table>
+                    }
+                }}
             </div>
         }} else { html!{} }}
         </>

@@ -170,7 +170,17 @@ pub async fn download_export(
             serde_json::json!(rows)
         }
         "transactions" => {
-            let q = format!("SELECT row_to_json(t) as doc FROM inventory_transactions t {} ORDER BY created_at DESC LIMIT 1000", facility_clause);
+            let q = if facility_clause.is_empty() {
+                "SELECT row_to_json(t) as doc FROM inventory_transactions t ORDER BY t.created_at DESC LIMIT 1000".to_string()
+            } else {
+                format!(
+                    "SELECT row_to_json(t) as doc FROM inventory_transactions t \
+                     INNER JOIN inventory_lots l ON t.lot_id = l.id \
+                     WHERE l.facility_id = '{}' \
+                     ORDER BY t.created_at DESC LIMIT 1000",
+                    ctx.scope_facility().unwrap()
+                )
+            };
             let rows: Vec<serde_json::Value> = diesel::sql_query(q)
             .load::<crate::repository::JsonRow>(&mut conn)
             .map_err(|e| ApiError::internal(&format!("Export query failed: {}", e)))?
@@ -218,7 +228,7 @@ fn mask_pii_fields(data: &mut serde_json::Value) {
                 for key in &["email", "contact_email", "contact_info"] {
                     if let Some(val) = obj.get_mut(*key) {
                         if let Some(s) = val.as_str() {
-                            *val = serde_json::Value::String(mask_email(s));
+                            *val = serde_json::Value::String(crate::service::masking::mask_email(s));
                         }
                     }
                 }
@@ -226,35 +236,11 @@ fn mask_pii_fields(data: &mut serde_json::Value) {
                 for key in &["phone", "contact_phone", "phone_number"] {
                     if let Some(val) = obj.get_mut(*key) {
                         if let Some(s) = val.as_str() {
-                            *val = serde_json::Value::String(mask_phone(s));
+                            *val = serde_json::Value::String(crate::service::masking::mask_phone(s));
                         }
                     }
                 }
             }
         }
-    }
-}
-
-fn mask_email(email: &str) -> String {
-    match email.split_once('@') {
-        Some((local, domain)) => {
-            if local.len() <= 2 {
-                format!("{}***@{}", &local[..1], domain)
-            } else {
-                format!("{}***{}@{}", &local[..1], &local[local.len()-1..], domain)
-            }
-        }
-        None => "***".to_string(),
-    }
-}
-
-fn mask_phone(phone: &str) -> String {
-    let digits: Vec<char> = phone.chars().filter(|c| c.is_ascii_digit()).collect();
-    if digits.len() >= 10 {
-        let area: String = digits[..3].iter().collect();
-        let last4: String = digits[digits.len()-4..].iter().collect();
-        format!("({}) ***-{}", area, last4)
-    } else {
-        "***-****".to_string()
     }
 }

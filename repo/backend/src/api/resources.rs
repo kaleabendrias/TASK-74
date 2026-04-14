@@ -74,8 +74,24 @@ pub async fn list_versions(
 ) -> Result<HttpResponse, ApiError> {
     require_role!(ctx, Administrator, Publisher, Reviewer);
 
+    let resource_id = path.into_inner();
     let mut conn = state.db_pool.get()?;
-    let versions = svc::list_versions(&mut conn, path.into_inner())?;
+
+    // Load resource and enforce facility ownership
+    let existing = svc::get_resource(&mut conn, resource_id)?;
+    if let Some(fid) = ctx.scope_facility() {
+        match existing.facility_id {
+            Some(rfid) if rfid != fid => {
+                return Err(ApiError::forbidden("Access denied: resource belongs to a different facility"));
+            }
+            None => {
+                return Err(ApiError::forbidden("Access denied: resource has no facility assignment"));
+            }
+            _ => {}
+        }
+    }
+
+    let versions = svc::list_versions(&mut conn, resource_id)?;
     Ok(HttpResponse::Ok().json(versions))
 }
 
@@ -88,7 +104,23 @@ pub async fn update(
 ) -> Result<HttpResponse, ApiError> {
     require_role!(ctx, Administrator, Publisher, Reviewer);
 
+    let resource_id = path.into_inner();
     let mut conn = state.db_pool.get()?;
-    let resource = svc::update_resource(&mut conn, path.into_inner(), &body, ctx.user_id, ctx.role)?;
+
+    // Load resource and enforce facility ownership
+    let existing = svc::get_resource(&mut conn, resource_id)?;
+    if let Some(fid) = ctx.scope_facility() {
+        match existing.facility_id {
+            Some(rfid) if rfid != fid => {
+                return Err(ApiError::forbidden("Access denied: resource belongs to a different facility"));
+            }
+            None => {
+                return Err(ApiError::forbidden("Access denied: resource has no facility assignment"));
+            }
+            _ => {}
+        }
+    }
+
+    let resource = svc::update_resource(&mut conn, resource_id, &body, ctx.user_id, ctx.role)?;
     Ok(HttpResponse::Ok().json(resource))
 }

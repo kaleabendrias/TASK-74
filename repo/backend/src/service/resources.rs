@@ -87,6 +87,7 @@ pub fn create_resource(
     };
 
     let row = resources::insert(conn, &new)?;
+    crate::service::audit::log_action(conn, user_id, "create", "resource", Some(row.id), None, None);
     Ok(row_to_response(&row))
 }
 
@@ -146,6 +147,25 @@ pub fn update_resource(
     // Validate state transition
     if let Some(ref new_state) = req.state {
         validate_state_transition(&existing.state, new_state, user_role)?;
+    }
+
+    // Reviewers may only change state — reject content edits
+    if user_role == UserRole::Reviewer {
+        let has_content_edits = req.title.is_some()
+            || req.category.is_some()
+            || req.tags.is_some()
+            || req.hours.is_some()
+            || req.pricing.is_some()
+            || req.address.is_some()
+            || req.latitude.is_some()
+            || req.longitude.is_some()
+            || req.media_refs.is_some()
+            || req.scheduled_publish_at.is_some();
+        if has_content_edits {
+            return Err(ApiError::forbidden(
+                "Reviewers may only change the resource state. Content edits require Publisher or Administrator role."
+            ));
+        }
     }
 
     // Validate media refs
@@ -209,6 +229,8 @@ pub fn update_resource(
     };
 
     let updated = resources::update(conn, id, &changeset)?;
+    crate::service::audit::log_action(conn, user_id, "update", "resource", Some(id),
+        Some(serde_json::json!({"version": existing.current_version + 1})), None);
     Ok(row_to_response(&updated))
 }
 
@@ -261,7 +283,7 @@ pub fn list_versions(
     Ok(resources::list_versions(conn, resource_id)?)
 }
 
-fn validate_state_transition(
+pub fn validate_state_transition(
     current: &str,
     new: &str,
     role: UserRole,
@@ -289,6 +311,9 @@ fn validate_state_transition(
     }
 }
 
+// All datetime inputs are treated as UTC. The frontend is responsible
+// for converting local time to UTC before submission. The scheduled
+// publisher evaluates against UTC time.
 fn parse_scheduled_publish(
     input: &Option<String>,
 ) -> Result<Option<chrono::DateTime<Utc>>, ApiError> {

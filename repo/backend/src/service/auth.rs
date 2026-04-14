@@ -74,6 +74,8 @@ pub fn login(
         },
     )?;
 
+    crate::service::audit::log_action(conn, user.id, "login", "session", Some(session.id), None, None);
+
     Ok(AuthenticatedSession {
         session_token,
         csrf_token,

@@ -105,8 +105,8 @@ pub fn sidebar() -> Html {
                     }
                 } else { html!{} }}
 
-                // Import/Export — Administrator, InventoryClerk
-                { if matches!(role, UserRole::Administrator | UserRole::InventoryClerk) {
+                // Import/Export — Administrator, InventoryClerk, Reviewer
+                { if matches!(role, UserRole::Administrator | UserRole::InventoryClerk | UserRole::Reviewer) {
                     html! {
                         <>
                         <div class="sidebar-section">{ "Data" }</div>

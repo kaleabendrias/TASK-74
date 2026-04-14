@@ -1,120 +1,105 @@
-// These tests verify the state transition rules that are enforced by
-// tourism_backend::service::resources::validate_state_transition (which is
-// private to the service module). The rules are duplicated here to enable
-// isolated unit testing without a database connection.
+//! Tests for resource state transition rules, calling the production function
+//! directly via tourism_backend::service::resources::validate_state_transition.
 
 use tourism_backend::model::UserRole;
-
-/// Replicate the state transition logic from service::resources for testing.
-/// The actual function is private, so we test the same rules here.
-fn is_valid_transition(current: &str, new: &str, role: UserRole) -> bool {
-    match (current, new) {
-        ("draft", "in_review") => role == UserRole::Publisher,
-        ("in_review", "published") => role == UserRole::Reviewer,
-        ("published", "offline") => {
-            role == UserRole::Publisher || role == UserRole::Administrator
-        }
-        ("offline", "draft") => role == UserRole::Publisher,
-        _ => false,
-    }
-}
+use tourism_backend::service::resources::validate_state_transition;
 
 // ── Legal transitions ──
 #[test]
 fn draft_to_in_review_by_publisher() {
-    assert!(is_valid_transition("draft", "in_review", UserRole::Publisher));
+    assert!(validate_state_transition("draft", "in_review", UserRole::Publisher).is_ok());
 }
 
 #[test]
 fn in_review_to_published_by_reviewer() {
-    assert!(is_valid_transition("in_review", "published", UserRole::Reviewer));
+    assert!(validate_state_transition("in_review", "published", UserRole::Reviewer).is_ok());
 }
 
 #[test]
 fn published_to_offline_by_publisher() {
-    assert!(is_valid_transition("published", "offline", UserRole::Publisher));
+    assert!(validate_state_transition("published", "offline", UserRole::Publisher).is_ok());
 }
 
 #[test]
 fn published_to_offline_by_administrator() {
-    assert!(is_valid_transition("published", "offline", UserRole::Administrator));
+    assert!(validate_state_transition("published", "offline", UserRole::Administrator).is_ok());
 }
 
 #[test]
 fn offline_to_draft_by_publisher() {
-    assert!(is_valid_transition("offline", "draft", UserRole::Publisher));
+    assert!(validate_state_transition("offline", "draft", UserRole::Publisher).is_ok());
 }
 
 // ── Illegal transitions ──
 #[test]
 fn draft_to_in_review_by_reviewer_denied() {
-    assert!(!is_valid_transition("draft", "in_review", UserRole::Reviewer));
+    assert!(validate_state_transition("draft", "in_review", UserRole::Reviewer).is_err());
 }
 
 #[test]
 fn draft_to_in_review_by_clinician_denied() {
-    assert!(!is_valid_transition("draft", "in_review", UserRole::Clinician));
+    assert!(validate_state_transition("draft", "in_review", UserRole::Clinician).is_err());
 }
 
 #[test]
 fn in_review_to_published_by_publisher_denied() {
-    assert!(!is_valid_transition("in_review", "published", UserRole::Publisher));
+    assert!(validate_state_transition("in_review", "published", UserRole::Publisher).is_err());
 }
 
 #[test]
 fn published_to_offline_by_reviewer_denied() {
-    assert!(!is_valid_transition("published", "offline", UserRole::Reviewer));
+    assert!(validate_state_transition("published", "offline", UserRole::Reviewer).is_err());
 }
 
 #[test]
 fn published_to_offline_by_clinician_denied() {
-    assert!(!is_valid_transition("published", "offline", UserRole::Clinician));
+    assert!(validate_state_transition("published", "offline", UserRole::Clinician).is_err());
 }
 
 #[test]
 fn draft_to_published_skip_denied() {
-    assert!(!is_valid_transition("draft", "published", UserRole::Administrator));
+    assert!(validate_state_transition("draft", "published", UserRole::Administrator).is_err());
 }
 
 #[test]
 fn draft_to_offline_denied() {
-    assert!(!is_valid_transition("draft", "offline", UserRole::Administrator));
+    assert!(validate_state_transition("draft", "offline", UserRole::Administrator).is_err());
 }
 
 #[test]
 fn in_review_to_draft_denied() {
-    assert!(!is_valid_transition("in_review", "draft", UserRole::Reviewer));
+    assert!(validate_state_transition("in_review", "draft", UserRole::Reviewer).is_err());
 }
 
 #[test]
 fn offline_to_published_skip_denied() {
-    assert!(!is_valid_transition("offline", "published", UserRole::Publisher));
+    assert!(validate_state_transition("offline", "published", UserRole::Publisher).is_err());
 }
 
 #[test]
 fn offline_to_draft_by_reviewer_denied() {
-    assert!(!is_valid_transition("offline", "draft", UserRole::Reviewer));
+    assert!(validate_state_transition("offline", "draft", UserRole::Reviewer).is_err());
 }
 
 #[test]
 fn same_state_transition_denied() {
-    assert!(!is_valid_transition("draft", "draft", UserRole::Publisher));
-    assert!(!is_valid_transition("published", "published", UserRole::Administrator));
+    assert!(validate_state_transition("draft", "draft", UserRole::Publisher).is_err());
+    assert!(validate_state_transition("published", "published", UserRole::Administrator).is_err());
 }
 
 #[test]
 fn inventory_clerk_denied_all() {
-    assert!(!is_valid_transition("draft", "in_review", UserRole::InventoryClerk));
-    assert!(!is_valid_transition("in_review", "published", UserRole::InventoryClerk));
-    assert!(!is_valid_transition("published", "offline", UserRole::InventoryClerk));
-    assert!(!is_valid_transition("offline", "draft", UserRole::InventoryClerk));
+    assert!(validate_state_transition("draft", "in_review", UserRole::InventoryClerk).is_err());
+    assert!(validate_state_transition("in_review", "published", UserRole::InventoryClerk).is_err());
+    assert!(validate_state_transition("published", "offline", UserRole::InventoryClerk).is_err());
+    assert!(validate_state_transition("offline", "draft", UserRole::InventoryClerk).is_err());
 }
 
 // ── Full lifecycle ──
 #[test]
 fn full_lifecycle() {
-    assert!(is_valid_transition("draft", "in_review", UserRole::Publisher));
-    assert!(is_valid_transition("in_review", "published", UserRole::Reviewer));
-    assert!(is_valid_transition("published", "offline", UserRole::Administrator));
-    assert!(is_valid_transition("offline", "draft", UserRole::Publisher));
+    assert!(validate_state_transition("draft", "in_review", UserRole::Publisher).is_ok());
+    assert!(validate_state_transition("in_review", "published", UserRole::Reviewer).is_ok());
+    assert!(validate_state_transition("published", "offline", UserRole::Administrator).is_ok());
+    assert!(validate_state_transition("offline", "draft", UserRole::Publisher).is_ok());
 }

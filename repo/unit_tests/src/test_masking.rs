@@ -1,33 +1,7 @@
-// Masks are implemented in the frontend WASM crate (frontend/src/services/mask.rs).
-// Since the unit test crate cannot depend on a wasm32 target, the logic is
-// replicated here to verify the masking rules.
+//! Tests for PII masking functions, calling the production implementations
+//! in tourism_backend::service::masking.
 
-/// Reimplementation of frontend mask functions for unit testing.
-fn mask_phone(phone: &str) -> String {
-    let digits: Vec<char> = phone.chars().filter(|c| c.is_ascii_digit()).collect();
-    if digits.len() >= 10 {
-        let area: String = digits[..3].iter().collect();
-        let last4: String = digits[digits.len()-4..].iter().collect();
-        format!("({}) ***-{}", area, last4)
-    } else {
-        "***-****".to_string()
-    }
-}
-
-fn mask_email(email: &str) -> String {
-    match email.split_once('@') {
-        Some((local, domain)) => {
-            if local.len() <= 2 {
-                format!("{}***@{}", &local[..1], domain)
-            } else {
-                let first = &local[..1];
-                let last = &local[local.len()-1..];
-                format!("{}***{}@{}", first, last, domain)
-            }
-        }
-        None => "***".to_string(),
-    }
-}
+use tourism_backend::service::masking::{mask_phone, mask_email};
 
 #[test]
 fn phone_standard_10_digit() {

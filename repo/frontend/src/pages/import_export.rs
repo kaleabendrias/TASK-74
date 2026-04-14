@@ -28,6 +28,19 @@ pub fn import_export_page() -> Html {
     let export_type = use_state(|| "resources".to_string());
     let export_approvals = use_state(|| Vec::<ExportApprovalResponse>::new());
 
+    // Fetch pending exports from server
+    {
+        let export_approvals = export_approvals.clone();
+        use_effect_with((), move |_| {
+            spawn_local(async move {
+                if let Ok(pending) = api::list_pending_exports().await {
+                    export_approvals.set(pending);
+                }
+            });
+            || {}
+        });
+    }
+
     // Poll job progress
     {
         let import_job = import_job.clone();
@@ -201,7 +214,7 @@ pub fn import_export_page() -> Html {
     let role = auth.user.as_ref().map(|u| &u.role);
 
     html! {
-        <RouteGuard allowed_roles={vec![UserRole::Administrator, UserRole::InventoryClerk]}>
+        <RouteGuard allowed_roles={vec![UserRole::Administrator, UserRole::InventoryClerk, UserRole::Reviewer]}>
         <>
         <div class="page-header">
             <h1>{ "Import / Export" }</h1>
