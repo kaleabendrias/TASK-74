@@ -40,9 +40,9 @@ fn poll_and_process(pool: &DbPool) -> Result<(), Box<dyn std::error::Error>> {
                 tracing::error!(job_id = %job.id, error = %msg, "Import job failed");
                 import_jobs::mark_job_failed(&mut conn, job.id, &msg)?;
 
-                // Re-queue if retries remain
-                if job.retries + 1 < job.max_retries {
-                    import_jobs::requeue_failed_job(&mut conn, job.id)?;
+                // Re-queue if under max retries (the SQL filter enforces the limit)
+                let requeued = import_jobs::requeue_failed_job(&mut conn, job.id)?;
+                if requeued > 0 {
                     tracing::info!(job_id = %job.id, "Re-queued failed job for retry");
                 }
             }
@@ -199,16 +199,22 @@ fn publish_scheduled(pool: &DbPool) -> Result<(), Box<dyn std::error::Error>> {
     let now = chrono::Utc::now();
 
     let count = diesel::sql_query(
-        "UPDATE resources SET state = 'published', updated_at = now() \
-         WHERE scheduled_publish_at <= $1 \
-         AND scheduled_publish_at IS NOT NULL \
-         AND state = 'in_review'"
+        "UPDATE resources r SET state = 'published', updated_at = now() \
+         WHERE r.scheduled_publish_at <= $1 \
+         AND r.scheduled_publish_at IS NOT NULL \
+         AND r.state = 'in_review' \
+         AND EXISTS ( \
+             SELECT 1 FROM review_decisions rd \
+             WHERE rd.entity_type = 'resource' \
+             AND rd.entity_id = r.id \
+             AND rd.decision = 'approved' \
+         )"
     )
     .bind::<diesel::sql_types::Timestamptz, _>(now)
     .execute(&mut conn)?;
 
     if count > 0 {
-        tracing::info!(count = count, "Published {} scheduled resources", count);
+        tracing::info!(count = count, "Published {} approved scheduled resources", count);
     }
     Ok(())
 }

@@ -33,8 +33,9 @@ async fn metrics_returns_prometheus_format() {
     assert!(body.contains("tourism_active_sessions"));
     assert!(body.contains("tourism_job_queue_depth"));
     assert!(body.contains("tourism_uptime_seconds"));
-    assert!(body.contains("tourism_request_count_total"));
-    assert!(body.contains("tourism_errors_total"));
+    assert!(body.contains("tourism_import_completed_total"));
+    assert!(body.contains("tourism_import_failed_total"));
+    assert!(body.contains("tourism_scheduled_published_total"));
 }
 
 #[tokio::test]

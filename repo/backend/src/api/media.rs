@@ -62,11 +62,20 @@ pub async fn upload(
 /// Downloads a media file by its ID.
 pub async fn download(
     state: web::Data<AppState>,
-    _ctx: RbacContext,
+    ctx: RbacContext,
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse, ApiError> {
     let mut conn = state.db_pool.get()?;
     let (meta, data) = svc::get_file(&mut conn, path.into_inner())?;
+
+    // Enforce facility scope: check if uploader is in the same facility
+    if let Some(scoped_fid) = ctx.scope_facility() {
+        let uploader = crate::repository::users::find_by_id(&mut conn, meta.uploaded_by)
+            .map_err(|_| ApiError::internal("Uploader not found"))?;
+        if uploader.facility_id != Some(scoped_fid) {
+            return Err(ApiError::forbidden("Access denied: media belongs to a different facility"));
+        }
+    }
 
     Ok(HttpResponse::Ok()
         .content_type(meta.mime_type.as_str())

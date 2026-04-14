@@ -20,6 +20,9 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
             .route("/auth/login", web::post().to(auth::login))
             .route("/auth/logout", web::post().to(auth::logout))
             .route("/auth/me", web::get().to(auth::me))
+            .route("/auth/mfa/setup", web::get().to(auth::mfa_setup))
+            .route("/auth/mfa/confirm", web::post().to(auth::mfa_confirm))
+            .route("/auth/mfa/disable", web::post().to(auth::mfa_disable))
             // Resources
             .route("/resources", web::post().to(resources::create))
             .route("/resources", web::get().to(resources::list))

@@ -38,6 +38,13 @@ pub async fn upload_import(
                     ApiError::bad_request("MULTIPART_ERROR", &e.to_string())
                 })?;
                 file_data.extend_from_slice(&data);
+                // Enforce 50MB upload limit
+                if file_data.len() > 52_428_800 {
+                    return Err(ApiError::unprocessable(
+                        "FILE_TOO_LARGE",
+                        "Import file exceeds 50 MB limit",
+                    ));
+                }
             }
         }
     }
@@ -54,6 +61,14 @@ pub async fn upload_import(
         return Err(ApiError::unprocessable(
             "INVALID_FILE_TYPE",
             "Only .xlsx files are accepted for import",
+        ));
+    }
+
+    // Verify XLSX signature (PK zip header)
+    if file_data.len() < 4 || &file_data[..4] != b"PK\x03\x04" {
+        return Err(ApiError::unprocessable(
+            "INVALID_FILE_TYPE",
+            "File does not appear to be a valid .xlsx (ZIP) archive",
         ));
     }
 
@@ -155,7 +170,10 @@ pub async fn download_export(
             let q = format!("SELECT row_to_json(r) as doc FROM resources r {} ORDER BY created_at DESC LIMIT 10000", facility_clause);
             let rows: Vec<serde_json::Value> = diesel::sql_query(q)
             .load::<crate::repository::JsonRow>(&mut conn)
-            .map_err(|e| ApiError::internal(&format!("Export query failed: {}", e)))?
+            .map_err(|e| {
+                tracing::error!(error = %e, export_type = %approval.export_type, "Export query failed");
+                ApiError::internal("Failed to generate export data")
+            })?
             .into_iter().map(|r| r.doc).collect();
             serde_json::json!(rows)
         }
@@ -163,7 +181,10 @@ pub async fn download_export(
             let q = format!("SELECT row_to_json(l) as doc FROM lodgings l {} ORDER BY created_at DESC LIMIT 10000", facility_clause);
             let rows: Vec<serde_json::Value> = diesel::sql_query(q)
             .load::<crate::repository::JsonRow>(&mut conn)
-            .map_err(|e| ApiError::internal(&format!("Export query failed: {}", e)))?
+            .map_err(|e| {
+                tracing::error!(error = %e, export_type = %approval.export_type, "Export query failed");
+                ApiError::internal("Failed to generate export data")
+            })?
             .into_iter().map(|r| r.doc).collect();
             serde_json::json!(rows)
         }
@@ -171,7 +192,10 @@ pub async fn download_export(
             let q = format!("SELECT row_to_json(i) as doc FROM inventory_lots i {} ORDER BY created_at DESC LIMIT 10000", facility_clause);
             let rows: Vec<serde_json::Value> = diesel::sql_query(q)
             .load::<crate::repository::JsonRow>(&mut conn)
-            .map_err(|e| ApiError::internal(&format!("Export query failed: {}", e)))?
+            .map_err(|e| {
+                tracing::error!(error = %e, export_type = %approval.export_type, "Export query failed");
+                ApiError::internal("Failed to generate export data")
+            })?
             .into_iter().map(|r| r.doc).collect();
             serde_json::json!(rows)
         }
@@ -189,7 +213,10 @@ pub async fn download_export(
             };
             let rows: Vec<serde_json::Value> = diesel::sql_query(q)
             .load::<crate::repository::JsonRow>(&mut conn)
-            .map_err(|e| ApiError::internal(&format!("Export query failed: {}", e)))?
+            .map_err(|e| {
+                tracing::error!(error = %e, export_type = %approval.export_type, "Export query failed");
+                ApiError::internal("Failed to generate export data")
+            })?
             .into_iter().map(|r| r.doc).collect();
             serde_json::json!(rows)
         }

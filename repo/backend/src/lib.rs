@@ -61,7 +61,13 @@ pub fn seed_defaults(pool: &DbPool) {
     let admin_pw = std::env::var("INIT_ADMIN_PASSWORD")
         .unwrap_or_else(|_| {
             let pw = crypto::csrf::generate_token()[..16].to_string();
-            tracing::warn!("No INIT_ADMIN_PASSWORD set. Generated admin password: {}", pw);
+            // Write to a file that should be read once and deleted
+            let secret_path = "/tmp/.tourism_init_password";
+            if let Err(e) = std::fs::write(secret_path, &pw) {
+                tracing::error!(error = %e, "Failed to write init password file");
+            } else {
+                tracing::info!("Initial admin password written to {} — read and delete this file after first login", secret_path);
+            }
             pw
         });
 
@@ -112,6 +118,36 @@ pub fn seed_defaults(pool: &DbPool) {
     }
 
     tracing::info!("Default users seeded. All accounts use the initial password from INIT_ADMIN_PASSWORD or the generated value above.");
+}
+
+/// Validates that secrets are properly configured. Panics in non-test profiles if
+/// critical secrets are missing or set to known insecure defaults.
+pub fn validate_secrets(cfg: &config::AppConfig) {
+    let profile = &cfg.app.config_profile;
+    if profile == "test" {
+        return; // Skip validation in test profile
+    }
+
+    let known_insecure = [
+        "",
+        "h4ck-pr00f-hmac-secret-change-in-production-2024",
+    ];
+
+    if known_insecure.contains(&cfg.auth.hmac_secret.as_str()) {
+        if profile == "production" {
+            panic!("FATAL: HMAC secret is missing or set to an insecure default. Set auth.hmac_secret or HMAC_SECRET env var.");
+        } else {
+            tracing::warn!("HMAC secret is set to a development default. Override in production.");
+        }
+    }
+
+    if cfg.crypto.aes256_master_key.is_empty() {
+        if profile == "production" {
+            panic!("FATAL: AES-256 master key is not configured. Set crypto.aes256_master_key or AES256_MASTER_KEY env var.");
+        } else {
+            tracing::warn!("AES-256 master key is empty. Encryption will fail.");
+        }
+    }
 }
 
 /// Re-export the require_role macro so test crates can use it.

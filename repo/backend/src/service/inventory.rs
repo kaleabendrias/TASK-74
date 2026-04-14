@@ -227,6 +227,25 @@ th {{ background: #eee; }}
     Ok(html)
 }
 
+/// Validates reservation input parameters without requiring a database connection.
+pub fn validate_reserve_input(quantity: i32) -> Result<(), ApiError> {
+    if quantity <= 0 {
+        return Err(ApiError::unprocessable("VALIDATION_ERROR", "Reservation quantity must be positive"));
+    }
+    Ok(())
+}
+
+/// Validates transaction input parameters without requiring a database connection.
+pub fn validate_transaction_input(direction: &str, quantity: i32) -> Result<(), ApiError> {
+    if quantity <= 0 {
+        return Err(ApiError::unprocessable("VALIDATION_ERROR", "Transaction quantity must be positive"));
+    }
+    if direction != "inbound" && direction != "outbound" {
+        return Err(ApiError::unprocessable("VALIDATION_ERROR", "Direction must be 'inbound' or 'outbound'"));
+    }
+    Ok(())
+}
+
 // ── Helpers ──
 
 fn escape_html(s: &str) -> String {

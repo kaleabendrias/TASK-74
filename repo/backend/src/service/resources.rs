@@ -1,4 +1,5 @@
 use chrono::Utc;
+use diesel::prelude::*;
 use diesel::PgConnection;
 use uuid::Uuid;
 
@@ -149,6 +150,40 @@ pub fn update_resource(
         validate_state_transition(&existing.state, new_state, user_role)?;
     }
 
+    // Record review decision for governance audit trail
+    if let Some(ref new_state) = req.state {
+        let decision = match new_state.as_str() {
+            "published" => Some("approved"),
+            "offline" => Some("rejected"),
+            _ => None,
+        };
+        if let Some(dec) = decision {
+            diesel::sql_query(
+                "INSERT INTO review_decisions (id, entity_type, entity_id, decision, decided_by, created_at) \
+                 VALUES (gen_random_uuid(), 'resource', $1, $2, $3, now())"
+            )
+            .bind::<diesel::sql_types::Uuid, _>(id)
+            .bind::<diesel::sql_types::Text, _>(dec)
+            .bind::<diesel::sql_types::Uuid, _>(user_id)
+            .execute(conn)?;
+        }
+    }
+
+    // If a reviewer is publishing a resource with a future scheduled_publish_at,
+    // keep it in 'in_review' and let the scheduler handle the actual transition.
+    let mut effective_state = req.state.clone();
+    if let Some(ref new_state) = effective_state {
+        if new_state == "published" && user_role == UserRole::Reviewer {
+            if let Some(sched) = existing.scheduled_publish_at {
+                if sched > Utc::now() {
+                    // Approved but not yet due — scheduler will publish it
+                    effective_state = None; // Don't change state now
+                    tracing::info!(resource_id = %id, scheduled = %sched, "Resource approved for scheduled publish");
+                }
+            }
+        }
+    }
+
     // Reviewers may only change state — reject content edits
     if user_role == UserRole::Reviewer {
         let has_content_edits = req.title.is_some()
@@ -221,7 +256,7 @@ pub fn update_resource(
         address: req.address.as_ref().map(|a| Some(a.clone())),
         latitude: req.latitude.map(Some),
         longitude: req.longitude.map(Some),
-        state: req.state.clone(),
+        state: effective_state,
         scheduled_publish_at: scheduled,
         current_version: Some(existing.current_version + 1),
         facility_id: None,

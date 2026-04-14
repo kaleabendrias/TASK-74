@@ -4,7 +4,7 @@ use std::time::Instant;
 use tracing_actix_web::TracingLogger;
 use tracing_subscriber::EnvFilter;
 
-use tourism_backend::{api, build_pool, config, jobs, run_migrations, seed_defaults, AppState};
+use tourism_backend::{api, build_pool, config, jobs, run_migrations, seed_defaults, validate_secrets, AppState};
 
 fn load_rustls_config(cfg: &config::TlsConfig) -> Option<rustls::ServerConfig> {
     let cert_path = &cfg.cert_path;
@@ -66,6 +66,7 @@ async fn main() -> std::io::Result<()> {
         .init();
 
     let cfg = config::AppConfig::load();
+    validate_secrets(&cfg);
     let pool = build_pool(&cfg.database.url, cfg.database.max_connections);
 
     run_migrations(&pool);

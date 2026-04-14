@@ -1,4 +1,6 @@
 use actix_web::{cookie, web, HttpRequest, HttpResponse};
+use base64::Engine as _;
+use diesel::prelude::*;
 use time::Duration as TimeDuration;
 
 use crate::errors::ApiError;
@@ -22,11 +24,13 @@ pub async fn login(
         body.totp_code.as_deref(),
     )?;
 
-    // Build HttpOnly Secure SameSite=Strict cookie
+    // Only set Secure flag if TLS is active (cert_path != /dev/null)
+    let tls_active = state.config.tls.cert_path != "/dev/null";
+
     let session_cookie = cookie::Cookie::build("session", &result.session_token)
         .path("/")
         .http_only(true)
-        .secure(true)
+        .secure(tls_active)
         .same_site(cookie::SameSite::Strict)
         .max_age(TimeDuration::seconds(
             state.config.auth.session_ttl_secs as i64,
@@ -64,10 +68,11 @@ pub async fn logout(
     auth_service::logout(&mut conn, &state.config, &token)?;
 
     // Clear the cookie
+    let tls_active = state.config.tls.cert_path != "/dev/null";
     let removal = cookie::Cookie::build("session", "")
         .path("/")
         .http_only(true)
-        .secure(true)
+        .secure(tls_active)
         .same_site(cookie::SameSite::Strict)
         .max_age(TimeDuration::ZERO)
         .finish();
@@ -96,4 +101,88 @@ pub async fn me(
         created_at: user.created_at,
     };
     Ok(HttpResponse::Ok().json(profile))
+}
+
+/// Generates a new TOTP secret for the current user to begin MFA enrollment.
+pub async fn mfa_setup(
+    state: web::Data<AppState>,
+    _ctx: RbacContext,
+) -> Result<HttpResponse, ApiError> {
+    let secret = crate::crypto::totp::generate_secret();
+    let encoded = base64::engine::general_purpose::STANDARD.encode(&secret);
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "secret_base64": encoded,
+        "issuer": state.config.totp.issuer,
+        "digits": state.config.totp.digits,
+        "period": state.config.totp.period_secs,
+    })))
+}
+
+/// Verifies a TOTP code and enables MFA for the current user.
+pub async fn mfa_confirm(
+    state: web::Data<AppState>,
+    ctx: RbacContext,
+    body: web::Json<serde_json::Value>,
+) -> Result<HttpResponse, ApiError> {
+    let secret_b64 = body["secret_base64"].as_str()
+        .ok_or_else(|| ApiError::bad_request("MISSING_FIELD", "secret_base64 required"))?;
+    let code = body["code"].as_str()
+        .ok_or_else(|| ApiError::bad_request("MISSING_FIELD", "TOTP code required"))?;
+
+    let secret_bytes = base64::engine::general_purpose::STANDARD.decode(secret_b64)
+        .map_err(|_| ApiError::bad_request("INVALID_SECRET", "Invalid base64 secret"))?;
+
+    // Verify the code against the provided secret
+    let totp = totp_rs::TOTP::new(
+        totp_rs::Algorithm::SHA1,
+        state.config.totp.digits as usize,
+        1,
+        state.config.totp.period_secs as u64,
+        secret_bytes.clone(),
+    ).map_err(|_| ApiError::internal("Failed to create TOTP verifier"))?;
+
+    if !totp.check_current(code).unwrap_or(false) {
+        return Err(ApiError::unauthorized("Invalid TOTP code"));
+    }
+
+    // Encrypt the secret and store it
+    let encrypted = crate::crypto::aes_gcm::encrypt(&secret_bytes, &state.config.crypto.aes256_master_key);
+    let mut conn = state.db_pool.get()?;
+    diesel::sql_query(
+        "UPDATE users SET totp_secret = $1, mfa_enabled = true, updated_at = now() WHERE id = $2"
+    )
+    .bind::<diesel::sql_types::Bytea, _>(&encrypted)
+    .bind::<diesel::sql_types::Uuid, _>(ctx.user_id)
+    .execute(&mut conn)?;
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({"mfa_enabled": true})))
+}
+
+/// Disables MFA for the current user (requires current TOTP code for security).
+pub async fn mfa_disable(
+    state: web::Data<AppState>,
+    ctx: RbacContext,
+    body: web::Json<serde_json::Value>,
+) -> Result<HttpResponse, ApiError> {
+    let code = body["code"].as_str()
+        .ok_or_else(|| ApiError::bad_request("MISSING_FIELD", "Current TOTP code required to disable MFA"))?;
+
+    let mut conn = state.db_pool.get()?;
+    let user = crate::repository::users::find_by_id(&mut conn, ctx.user_id)?;
+
+    if let Some(ref secret) = user.totp_secret {
+        if !crate::crypto::totp::verify(secret, code, &state.config.totp, &state.config.crypto.aes256_master_key) {
+            return Err(ApiError::unauthorized("Invalid TOTP code"));
+        }
+    } else {
+        return Err(ApiError::bad_request("MFA_NOT_ENABLED", "MFA is not currently enabled"));
+    }
+
+    diesel::sql_query(
+        "UPDATE users SET totp_secret = NULL, mfa_enabled = false, updated_at = now() WHERE id = $1"
+    )
+    .bind::<diesel::sql_types::Uuid, _>(ctx.user_id)
+    .execute(&mut conn)?;
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({"mfa_enabled": false})))
 }

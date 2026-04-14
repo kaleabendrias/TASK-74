@@ -1,5 +1,7 @@
 use bigdecimal::BigDecimal;
 use chrono::Utc;
+use diesel::prelude::*;
+use diesel::Connection;
 use diesel::PgConnection;
 use std::str::FromStr;
 use uuid::Uuid;
@@ -238,22 +240,29 @@ pub fn approve_rent_change(
         ));
     }
 
-    // Atomically update the rent change and lodging in a transaction
-    let updated_change = repo::update_rent_change_status(conn, change_id, "approved", reviewer_id)?;
+    let updated_change = conn.transaction(|tx_conn| {
+        let updated = repo::update_rent_change_status(tx_conn, change_id, "approved", reviewer_id)?;
 
-    // Apply to lodging
-    let changeset = repo::LodgingUpdate {
-        name: None,
-        description: None,
-        state: None,
-        amenities: None,
-        facility_id: None,
-        deposit_amount: Some(Some(updated_change.proposed_deposit.clone())),
-        monthly_rent: Some(Some(updated_change.proposed_rent.clone())),
-        deposit_cap_validated: Some(true),
-        updated_at: Some(Utc::now()),
-    };
-    repo::update_lodging(conn, lodging_id, &changeset)?;
+        let changeset = repo::LodgingUpdate {
+            name: None, description: None, state: None, amenities: None,
+            facility_id: None,
+            deposit_amount: Some(Some(updated.proposed_deposit.clone())),
+            monthly_rent: Some(Some(updated.proposed_rent.clone())),
+            deposit_cap_validated: Some(true),
+            updated_at: Some(Utc::now()),
+        };
+        repo::update_lodging(tx_conn, lodging_id, &changeset)?;
+
+        diesel::sql_query(
+            "INSERT INTO review_decisions (id, entity_type, entity_id, decision, decided_by, created_at) \
+             VALUES (gen_random_uuid(), 'lodging_rent_change', $1, 'approved', $2, now())"
+        )
+        .bind::<diesel::sql_types::Uuid, _>(change_id)
+        .bind::<diesel::sql_types::Uuid, _>(reviewer_id)
+        .execute(tx_conn)?;
+
+        Ok::<_, diesel::result::Error>(updated)
+    })?;
 
     Ok(rent_change_to_response(&updated_change))
 }
@@ -277,6 +286,15 @@ pub fn reject_rent_change(
     }
 
     let updated = repo::update_rent_change_status(conn, change_id, "rejected", reviewer_id)?;
+
+    diesel::sql_query(
+        "INSERT INTO review_decisions (id, entity_type, entity_id, decision, decided_by, created_at) \
+         VALUES (gen_random_uuid(), 'lodging_rent_change', $1, 'rejected', $2, now())"
+    )
+    .bind::<diesel::sql_types::Uuid, _>(change_id)
+    .bind::<diesel::sql_types::Uuid, _>(reviewer_id)
+    .execute(conn)?;
+
     Ok(rent_change_to_response(&updated))
 }
 
