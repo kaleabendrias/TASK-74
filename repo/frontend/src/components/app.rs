@@ -26,6 +26,7 @@ fn switch_route(route: Route) -> Html {
         Route::InventoryTransactions => html! { <inventory::TransactionsPage /> },
         Route::ImportExport => html! { <import_export::ImportExportPage /> },
         Route::Configuration => html! { <configuration::ConfigurationPage /> },
+        Route::SecuritySettings => html! { <security_settings::SecuritySettingsPage /> },
         Route::Forbidden => html! { <forbidden::ForbiddenPage /> },
         Route::NotFound => html! { <forbidden::NotFoundPage /> },
     }

@@ -5,8 +5,8 @@ async fn export_request_and_approve_flow() {
     let pool = setup_pool();
     let _seed = seed_users(&pool);
 
-    // Request export as clerk
-    let (session, csrf) = login_as(&authed_client(), "clerk").await;
+    // Request export as reviewer
+    let (session, csrf) = login_as(&authed_client(), "reviewer").await;
     let c = bearer_client(&session);
     let resp = c.post(&format!("{}/api/export/request", base_url()))
         .header("X-CSRF-Token", &csrf)
@@ -39,6 +39,20 @@ async fn export_request_and_approve_flow() {
     assert_eq!(resp.status(), 200);
     let body: serde_json::Value = resp.json().await.unwrap();
     assert!(body["watermark"].is_string());
+}
+
+#[tokio::test]
+async fn clerk_cannot_request_export() {
+    let pool = setup_pool();
+    let _seed = seed_users(&pool);
+
+    let (session, csrf) = login_as(&authed_client(), "clerk").await;
+    let c = bearer_client(&session);
+    let resp = c.post(&format!("{}/api/export/request", base_url()))
+        .header("X-CSRF-Token", &csrf)
+        .json(&serde_json::json!({"export_type": "inventory"}))
+        .send().await.unwrap();
+    assert_eq!(resp.status(), 403);
 }
 
 #[tokio::test]

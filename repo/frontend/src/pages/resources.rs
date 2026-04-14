@@ -215,6 +215,7 @@ pub fn resource_form_page(props: &ResourceFormProps) -> Html {
     let hours = use_state(|| serde_json::json!({}));
     let pricing = use_state(|| serde_json::json!({}));
     let scheduled = use_state(String::new);
+    let contact_info = use_state(String::new);
     let state = use_state(|| "draft".to_string());
     let current_version = use_state(|| 1i32);
     let media_previews = use_state(|| Vec::<(String, String, String)>::new()); // (preview_url, filename, media_id)
@@ -401,6 +402,7 @@ pub fn resource_form_page(props: &ResourceFormProps) -> Html {
         let hours = hours.clone();
         let pricing = pricing.clone();
         let scheduled = scheduled.clone();
+        let contact_info = contact_info.clone();
         let state_h = state.clone();
         let error = error.clone();
         let loading = loading.clone();
@@ -419,6 +421,7 @@ pub fn resource_form_page(props: &ResourceFormProps) -> Html {
             let hours_v = (*hours).clone();
             let pricing_v = (*pricing).clone();
             let sched_v = (*scheduled).clone();
+            let contact_info_v = (*contact_info).clone();
             let error = error.clone();
             let loading = loading.clone();
             let toasts = toasts.clone();
@@ -451,6 +454,8 @@ pub fn resource_form_page(props: &ResourceFormProps) -> Html {
 
                 let media_ids: Vec<String> = (*media_previews_c).iter().map(|(_, _, id)| id.clone()).collect();
 
+                let contact_opt = if contact_info_v.is_empty() { None } else { Some(contact_info_v) };
+
                 let result = if let Some(rid) = props_id {
                     let req = UpdateResourceRequest {
                         title: Some(title_v),
@@ -465,6 +470,7 @@ pub fn resource_form_page(props: &ResourceFormProps) -> Html {
                         state: None,
                         scheduled_publish_at: sched_opt,
                         tz_offset_minutes: tz_offset,
+                        contact_info: contact_opt,
                     };
                     api::update_resource(&rid, &req).await
                 } else {
@@ -480,6 +486,7 @@ pub fn resource_form_page(props: &ResourceFormProps) -> Html {
                         media_refs: media_ids.clone(),
                         scheduled_publish_at: sched_opt,
                         tz_offset_minutes: tz_offset,
+                        contact_info: contact_opt,
                     };
                     api::create_resource(&req).await
                 };
@@ -520,6 +527,8 @@ pub fn resource_form_page(props: &ResourceFormProps) -> Html {
                             pricing: None, address: None, latitude: None, longitude: None,
                             media_refs: None, state: Some(new_st.clone()),
                             scheduled_publish_at: None,
+                            tz_offset_minutes: None,
+                            contact_info: None,
                         };
                         match api::update_resource(&rid, &req).await {
                             Ok(_) => {
@@ -645,6 +654,23 @@ pub fn resource_form_page(props: &ResourceFormProps) -> Html {
                     </div>
                     <div class={if tags.len() > 20 { "char-counter over" } else { "char-counter" }}>
                         { format!("{}/20 tags", tags.len()) }
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="res-contact-info">{ "Contact Info " }<span class="text-secondary text-sm">{ "(encrypted at rest)" }</span></label>
+                    <textarea id="res-contact-info" rows="2"
+                        placeholder="Phone, email, or other contact details (stored encrypted)"
+                        value={(*contact_info).clone()}
+                        oninput={{
+                            let ci = contact_info.clone();
+                            Callback::from(move |e: InputEvent| {
+                                let input: HtmlInputElement = e.target_unchecked_into();
+                                ci.set(input.value());
+                            })
+                        }} />
+                    <div class="text-secondary text-sm mt-1">
+                        { "Leave blank when editing to keep the existing value unchanged." }
                     </div>
                 </div>
             </div>

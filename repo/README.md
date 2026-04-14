@@ -220,7 +220,7 @@ All endpoints are under `/api`. Authentication is required unless noted.
 | | GET | `/api/media/:id/download` | Authenticated | Download file |
 | **Import** | POST | `/api/import/upload` | Admin, Clerk | Upload .xlsx for import |
 | | GET | `/api/import/jobs/:id` | Authenticated | Job status and progress |
-| **Export** | POST | `/api/export/request` | Authenticated | Request export |
+| **Export** | POST | `/api/export/request` | Admin, Reviewer | Request export |
 | | POST | `/api/export/approve/:id` | Admin, Reviewer | Approve export |
 | | GET | `/api/export/download/:id` | Authenticated | Download approved export |
 | **Connector** | POST | `/api/connector/inbound` | HMAC-signed | Ingest external payloads |

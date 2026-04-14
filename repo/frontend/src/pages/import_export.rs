@@ -283,7 +283,8 @@ pub fn import_export_page() -> Html {
             } else { html!{} }}
         </div>
 
-        // ── Export section ──
+        // ── Export section — only Administrator and Reviewer may request exports ──
+        { if matches!(role, Some(UserRole::Administrator) | Some(UserRole::Reviewer)) { html! {
         <div class="card">
             <div class="card-header"><h2>{ "Export Data" }</h2></div>
 
@@ -365,6 +366,14 @@ pub fn import_export_page() -> Html {
                 html! { <p class="text-secondary text-sm">{ "No export requests yet." }</p> }
             }}
         </div>
+        }} else { html! {
+            <div class="card">
+                <div class="card-header"><h2>{ "Export Data" }</h2></div>
+                <p class="text-secondary text-sm">
+                    { "Export requests require Administrator or Reviewer role." }
+                </p>
+            </div>
+        }}}
         </>
         </RouteGuard>
     }

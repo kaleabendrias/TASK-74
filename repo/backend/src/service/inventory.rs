@@ -7,7 +7,8 @@ use crate::errors::ApiError;
 use crate::model::*;
 use crate::repository::inventory as repo;
 
-/// Creates a new inventory lot after validating item name and quantity.
+/// Creates a new inventory lot after validating item name, quantity, and
+/// relational integrity (warehouse → facility, bin → warehouse).
 pub fn create_lot(
     conn: &mut PgConnection,
     req: &CreateLotRequest,
@@ -22,6 +23,26 @@ pub fn create_lot(
         return Err(ApiError::unprocessable(
             "VALIDATION_ERROR",
             "quantity_on_hand must be non-negative",
+        ));
+    }
+
+    // Triple-check 1: warehouse must exist and belong to the declared facility.
+    let warehouse = repo::find_warehouse_by_id(conn, req.warehouse_id)
+        .map_err(|_| ApiError::not_found("Warehouse"))?;
+    if warehouse.facility_id != req.facility_id {
+        return Err(ApiError::unprocessable(
+            "INVALID_LOCATION",
+            "warehouse_id does not belong to the specified facility_id",
+        ));
+    }
+
+    // Triple-check 2: bin must exist and belong to the declared warehouse.
+    let bin = repo::find_bin_by_id(conn, req.bin_id)
+        .map_err(|_| ApiError::not_found("Bin"))?;
+    if bin.warehouse_id != req.warehouse_id {
+        return Err(ApiError::unprocessable(
+            "INVALID_LOCATION",
+            "bin_id does not belong to the specified warehouse_id",
         ));
     }
 

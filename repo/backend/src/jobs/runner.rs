@@ -271,6 +271,36 @@ fn process_xlsx_job(
     Ok(())
 }
 
+/// Returns `true` if a staging table with the given name exists in the public
+/// schema. Exposed as `pub` so that integration tests can assert on it.
+pub fn staging_table_exists(conn: &mut PgConnection, name: &str) -> bool {
+    diesel::sql_query(format!(
+        "SELECT EXISTS (SELECT 1 FROM information_schema.tables \
+         WHERE table_schema = 'public' AND table_name = '{}')", name
+    ))
+    .load::<BoolRow>(conn)
+    .map(|rows| rows.first().map(|r| r.exists).unwrap_or(false))
+    .unwrap_or(false)
+}
+
+/// Creates an empty import staging table with the standard schema.
+/// Exposed as `pub` so that integration tests can set up fixtures directly.
+pub fn create_staging_table(conn: &mut PgConnection, name: &str) -> Result<(), diesel::result::Error> {
+    diesel::sql_query(format!(
+        "CREATE TABLE IF NOT EXISTS {} (\
+         facility_id UUID NOT NULL, warehouse_id UUID NOT NULL, bin_id UUID NOT NULL, \
+         item_name TEXT NOT NULL, lot_number TEXT NOT NULL, quantity_on_hand INT NOT NULL\
+         )", name
+    )).execute(conn).map(|_| ())
+}
+
+/// Drops a staging table. Exposed as `pub` for test cleanup.
+pub fn drop_staging_table(conn: &mut PgConnection, name: &str) {
+    diesel::sql_query(format!("DROP TABLE IF EXISTS {}", name))
+        .execute(conn)
+        .ok();
+}
+
 /// Helper for reading a boolean from a raw SQL EXISTS query.
 #[derive(diesel::QueryableByName, Debug)]
 struct BoolRow {

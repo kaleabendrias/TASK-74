@@ -14,6 +14,11 @@ pub struct WarehouseRow {
     pub name: String,
 }
 
+/// Finds a single warehouse by its ID.
+pub fn find_warehouse_by_id(conn: &mut PgConnection, id: Uuid) -> QueryResult<WarehouseRow> {
+    warehouses::table.find(id).select(WarehouseRow::as_select()).first(conn)
+}
+
 /// Lists warehouses, optionally filtered by facility.
 pub fn list_warehouses(conn: &mut PgConnection, facility_id: Option<Uuid>) -> QueryResult<Vec<WarehouseRow>> {
     let mut query = warehouses::table.into_boxed();
@@ -31,6 +36,11 @@ pub struct BinRow {
     pub id: Uuid,
     pub warehouse_id: Uuid,
     pub label: String,
+}
+
+/// Finds a single bin by its ID.
+pub fn find_bin_by_id(conn: &mut PgConnection, id: Uuid) -> QueryResult<BinRow> {
+    bins::table.find(id).select(BinRow::as_select()).first(conn)
 }
 
 /// Lists bins, optionally filtered by warehouse.

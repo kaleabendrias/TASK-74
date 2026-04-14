@@ -63,7 +63,7 @@ sleep 3
 # Wait for backend health
 echo "  Waiting for backend health check..."
 RETRIES=30
-until curl -sf http://localhost:8080/api/health > /dev/null 2>&1; do
+until curl -sf http://localhost:8088/api/health > /dev/null 2>&1; do
     RETRIES=$((RETRIES - 1))
     if [ "$RETRIES" -le 0 ]; then
         echo -e "${YELLOW}WARNING: Backend health check not reachable from host, checking from inside Docker...${NC}"

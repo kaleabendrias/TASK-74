@@ -105,6 +105,7 @@ pub fn update_resource(
     req: &crate::model::UpdateResourceRequest,
     user_id: Uuid,
     user_role: UserRole,
+    master_key: &str,
 ) -> Result<ResourceResponse, ApiError> {
     let existing = resources::find_by_id(conn, id)?;
     let mut errors = vec![];
@@ -246,12 +247,23 @@ pub fn update_resource(
         },
     )?;
 
+    // Encrypt contact_info if provided; None means "don't touch the column".
+    // An empty string clears the stored value (sets NULL).
+    let contact_encrypted: Option<Option<Vec<u8>>> = req.contact_info.as_ref().map(|info| {
+        if info.is_empty() {
+            None
+        } else {
+            Some(crate::crypto::aes_gcm::encrypt(info.as_bytes(), master_key))
+        }
+    });
+
     let changeset = resources::ResourceUpdate {
         title: req.title.clone(),
         category: req.category.as_ref().map(|c| Some(c.clone())),
         tags: req.tags.as_ref().map(|t| serde_json::json!(t)),
         hours: req.hours.clone(),
         pricing: req.pricing.clone(),
+        contact_info_encrypted: contact_encrypted,
         media_refs: req.media_refs.as_ref().map(|r| serde_json::json!(r)),
         address: req.address.as_ref().map(|a| Some(a.clone())),
         latitude: req.latitude.map(Some),

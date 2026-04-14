@@ -30,6 +30,8 @@ pub enum Route {
     ImportExport,
     #[at("/configuration")]
     Configuration,
+    #[at("/security")]
+    SecuritySettings,
     #[at("/forbidden")]
     Forbidden,
     #[not_found]

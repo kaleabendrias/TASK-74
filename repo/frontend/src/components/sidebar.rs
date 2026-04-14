@@ -128,6 +128,12 @@ pub fn sidebar() -> Html {
                         </>
                     }
                 } else { html!{} }}
+
+                // Security Settings — all authenticated users
+                <div class="sidebar-section">{ "Account" }</div>
+                <Link<Route> to={Route::SecuritySettings} classes={is_active(&Route::SecuritySettings)}>
+                    { "Security Settings" }
+                </Link<Route>>
             </nav>
 
             <div class="sidebar-footer">

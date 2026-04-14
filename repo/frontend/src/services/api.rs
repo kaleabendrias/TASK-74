@@ -340,3 +340,21 @@ pub async fn upsert_config(key: &str, value: &str, feature_switch: bool) -> Resu
 pub async fn health() -> Result<HealthResponse, String> {
     get_json(&format!("{}/health", BASE)).await
 }
+
+// ── MFA ──
+pub async fn mfa_setup() -> Result<MfaSetupResponse, String> {
+    get_json(&format!("{}/auth/mfa/setup", BASE)).await
+}
+
+pub async fn mfa_confirm(secret_base64: &str, code: &str) -> Result<serde_json::Value, String> {
+    post_json(&format!("{}/auth/mfa/confirm", BASE), &serde_json::json!({
+        "secret_base64": secret_base64,
+        "code": code,
+    })).await
+}
+
+pub async fn mfa_disable(code: &str) -> Result<serde_json::Value, String> {
+    post_json(&format!("{}/auth/mfa/disable", BASE), &serde_json::json!({
+        "code": code,
+    })).await
+}

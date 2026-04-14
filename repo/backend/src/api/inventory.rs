@@ -28,6 +28,8 @@ pub async fn list_warehouses(
 }
 
 /// Lists bins for a given warehouse.
+/// Facility-scoped users may only fetch bins for warehouses that belong to
+/// their own facility; the request is rejected with 403 otherwise.
 pub async fn list_bins(
     state: web::Data<AppState>,
     ctx: RbacContext,
@@ -36,6 +38,20 @@ pub async fn list_bins(
     require_role!(ctx, Administrator, InventoryClerk, Clinician);
 
     let mut conn = state.db_pool.get()?;
+
+    // Verify the warehouse belongs to the user's facility before returning its bins.
+    if let Some(wid) = query.warehouse_id {
+        if let Some(scoped_fid) = ctx.scope_facility() {
+            let warehouse = repo::find_warehouse_by_id(&mut conn, wid)
+                .map_err(|_| ApiError::not_found("Warehouse"))?;
+            if warehouse.facility_id != scoped_fid {
+                return Err(ApiError::forbidden(
+                    "Access denied: warehouse belongs to a different facility",
+                ));
+            }
+        }
+    }
+
     let rows = repo::list_bins(&mut conn, query.warehouse_id)?;
     let resp: Vec<BinResponse> = rows
         .into_iter()

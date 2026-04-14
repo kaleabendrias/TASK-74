@@ -258,25 +258,26 @@ async fn resource_versions_returns_history() {
 }
 
 #[tokio::test]
-async fn mfa_challenge_returns_401_with_code() {
+async fn mfa_challenge_returns_200_with_mfa_required() {
     let pool = setup_pool();
     let _seed = seed_users(&pool);
 
-    // Enable MFA for a user
+    // Enable MFA for a user (totp_secret must be non-NULL for the check to trigger)
     let mut conn = pool.get().unwrap();
     diesel::sql_query(
         "UPDATE users SET mfa_enabled = true, totp_secret = '\\x00'::bytea WHERE username = 'admin'"
     ).execute(&mut conn).unwrap();
     drop(conn);
 
-    // Login without TOTP code
+    // Login without TOTP code — the backend returns 200 with mfa_required=true
+    // so the frontend can present a TOTP field without parsing error strings.
     let c = authed_client();
     let resp = c.post(&format!("{}/api/auth/login", base_url()))
         .json(&serde_json::json!({"username": "admin", "password": "testpassword"}))
         .send().await.unwrap();
-    assert_eq!(resp.status(), 401);
+    assert_eq!(resp.status(), 200);
     let body: serde_json::Value = resp.json().await.unwrap();
-    assert_eq!(body["code"], "MFA_REQUIRED");
+    assert_eq!(body["mfa_required"], true, "body must signal mfa_required");
 
     // Reset MFA for other tests
     let mut conn = pool.get().unwrap();
@@ -289,12 +290,12 @@ async fn export_download_blocked_for_non_requester_non_admin() {
     let pool = setup_pool();
     let _seed = seed_users(&pool);
 
-    // Clerk requests an export
-    let (clerk_session, clerk_csrf) = login_as(&authed_client(), "clerk").await;
-    let clerk = bearer_client(&clerk_session);
+    // Reviewer requests an export (only Admin/Reviewer may request)
+    let (rev_session, rev_csrf) = login_as(&authed_client(), "reviewer").await;
+    let reviewer = bearer_client(&rev_session);
 
-    let resp = clerk.post(&format!("{}/api/export/request", base_url()))
-        .header("X-CSRF-Token", &clerk_csrf)
+    let resp = reviewer.post(&format!("{}/api/export/request", base_url()))
+        .header("X-CSRF-Token", &rev_csrf)
         .json(&serde_json::json!({"export_type": "inventory"}))
         .send().await.unwrap();
     assert_eq!(resp.status(), 201);

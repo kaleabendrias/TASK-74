@@ -121,6 +121,6 @@ pub async fn update(
         }
     }
 
-    let resource = svc::update_resource(&mut conn, resource_id, &body, ctx.user_id, ctx.role)?;
+    let resource = svc::update_resource(&mut conn, resource_id, &body, ctx.user_id, ctx.role, &state.config.crypto.aes256_master_key)?;
     Ok(HttpResponse::Ok().json(resource))
 }

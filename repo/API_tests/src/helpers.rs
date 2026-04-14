@@ -28,6 +28,7 @@ pub fn test_config() -> AppConfig {
         prometheus: PrometheusConfig { scrape_path: "/metrics".into() },
         canary: CanaryConfig { profile: "stable".into() },
         app: AppMetaConfig { config_profile: "test".into(), service_name: "test-backend".into(), version: "0.1.0-test".into() },
+        mq: MqConfig::default(),
     }
 }
 
@@ -78,6 +79,19 @@ pub fn seed_users(pool: &DbPool) -> SeedData {
         &format!("INSERT INTO bins (id, warehouse_id, label) VALUES (gen_random_uuid(), '{}', 'Bin-01') RETURNING id", warehouse_id)
     ).get_result::<BinId>(&mut conn).unwrap().id;
 
+    // Create second facility (for cross-facility isolation tests)
+    let facility2_id: uuid::Uuid = diesel::sql_query(
+        "INSERT INTO facilities (id, name, address) VALUES (gen_random_uuid(), 'Other Facility', '456 Other St') RETURNING id"
+    ).get_result::<FacilityId>(&mut conn).unwrap().id;
+
+    let warehouse2_id: uuid::Uuid = diesel::sql_query(
+        &format!("INSERT INTO warehouses (id, facility_id, name) VALUES (gen_random_uuid(), '{}', 'Warehouse B') RETURNING id", facility2_id)
+    ).get_result::<WarehouseId>(&mut conn).unwrap().id;
+
+    let bin2_id: uuid::Uuid = diesel::sql_query(
+        &format!("INSERT INTO bins (id, warehouse_id, label) VALUES (gen_random_uuid(), '{}', 'Bin-B1') RETURNING id", warehouse2_id)
+    ).get_result::<BinId>(&mut conn).unwrap().id;
+
     let pw = argon2id::hash("testpassword");
 
     // Admin user
@@ -89,6 +103,7 @@ pub fn seed_users(pool: &DbPool) -> SeedData {
 
     SeedData {
         facility_id, warehouse_id, bin_id,
+        facility2_id, warehouse2_id, bin2_id,
         admin_id, publisher_id, reviewer_id, clinician_id, clerk_id,
     }
 }
@@ -131,6 +146,9 @@ pub struct SeedData {
     pub facility_id: uuid::Uuid,
     pub warehouse_id: uuid::Uuid,
     pub bin_id: uuid::Uuid,
+    pub facility2_id: uuid::Uuid,
+    pub warehouse2_id: uuid::Uuid,
+    pub bin2_id: uuid::Uuid,
     pub admin_id: uuid::Uuid,
     pub publisher_id: uuid::Uuid,
     pub reviewer_id: uuid::Uuid,

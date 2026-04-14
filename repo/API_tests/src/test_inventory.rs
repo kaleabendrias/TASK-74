@@ -1,5 +1,84 @@
 use crate::helpers::*;
 
+// ── Cross-facility isolation tests ──────────────────────────────────────────
+
+/// A clerk scoped to facility 1 must not list bins from a warehouse that
+/// belongs to facility 2 — the backend must return 403 or 404.
+#[tokio::test]
+async fn clerk_cannot_list_bins_from_other_facility() {
+    let pool = setup_pool();
+    let seed = seed_users(&pool);
+    let (session, csrf) = login_as(&authed_client(), "clerk").await;
+    let c = bearer_client(&session);
+    let _ = csrf; // CSRF not needed for GET
+
+    // Clerk belongs to facility_id, warehouse2_id belongs to facility2_id.
+    let resp = c.get(&format!(
+        "{}/api/inventory/bins?warehouse_id={}",
+        base_url(), seed.warehouse2_id
+    ))
+    .send().await.unwrap();
+    assert!(
+        resp.status() == 403 || resp.status() == 404,
+        "expected 403 or 404 but got {}",
+        resp.status()
+    );
+}
+
+/// create_lot must reject a request where warehouse_id belongs to a different
+/// facility than the declared facility_id — the backend returns 422.
+#[tokio::test]
+async fn create_lot_rejects_warehouse_from_wrong_facility() {
+    let pool = setup_pool();
+    let seed = seed_users(&pool);
+    // Use admin so we are not additionally blocked by facility-scope guards.
+    let (session, csrf) = login_as(&authed_client(), "admin").await;
+    let c = bearer_client(&session);
+
+    // facility_id = facility 1, but warehouse_id belongs to facility 2.
+    let resp = c.post(&format!("{}/api/inventory/lots", base_url()))
+        .header("X-CSRF-Token", &csrf)
+        .json(&serde_json::json!({
+            "facility_id": seed.facility_id.to_string(),
+            "warehouse_id": seed.warehouse2_id.to_string(),
+            "bin_id": seed.bin2_id.to_string(),
+            "item_name": "Invalid",
+            "lot_number": "LOT-XFAC",
+            "quantity_on_hand": 1
+        }))
+        .send().await.unwrap();
+    assert_eq!(resp.status(), 422);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["code"], "INVALID_LOCATION");
+}
+
+/// create_lot must reject a request where bin_id belongs to a different
+/// warehouse than the declared warehouse_id — the backend returns 422.
+#[tokio::test]
+async fn create_lot_rejects_bin_from_wrong_warehouse() {
+    let pool = setup_pool();
+    let seed = seed_users(&pool);
+    let (session, csrf) = login_as(&authed_client(), "admin").await;
+    let c = bearer_client(&session);
+
+    // facility_id and warehouse_id are consistent (both facility 1), but
+    // bin2_id belongs to warehouse2 (facility 2).
+    let resp = c.post(&format!("{}/api/inventory/lots", base_url()))
+        .header("X-CSRF-Token", &csrf)
+        .json(&serde_json::json!({
+            "facility_id": seed.facility_id.to_string(),
+            "warehouse_id": seed.warehouse_id.to_string(),
+            "bin_id": seed.bin2_id.to_string(),
+            "item_name": "Invalid Bin",
+            "lot_number": "LOT-XBIN",
+            "quantity_on_hand": 1
+        }))
+        .send().await.unwrap();
+    assert_eq!(resp.status(), 422);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["code"], "INVALID_LOCATION");
+}
+
 #[tokio::test]
 async fn create_lot_and_list() {
     let pool = setup_pool();

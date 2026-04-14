@@ -98,6 +98,8 @@ pub struct CreateResourceRequest {
     pub scheduled_publish_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tz_offset_minutes: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub contact_info: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -126,6 +128,8 @@ pub struct UpdateResourceRequest {
     pub scheduled_publish_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tz_offset_minutes: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub contact_info: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -351,6 +355,15 @@ pub struct HealthResponse {
     pub database_connected: bool,
     pub disk_usage_bytes: Option<u64>,
     pub config_profile: String,
+}
+
+// MFA Setup
+#[derive(Debug, Clone, Deserialize)]
+pub struct MfaSetupResponse {
+    pub secret_base64: String,
+    pub issuer: String,
+    pub digits: u32,
+    pub period: u64,
 }
 
 // Toast

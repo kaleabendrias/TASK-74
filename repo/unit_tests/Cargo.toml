@@ -15,3 +15,5 @@ totp-rs = { version = "5", features = ["gen_secret"] }
 hmac = "0.12"
 sha2 = "0.10"
 bigdecimal = { version = "0.4", features = ["serde"] }
+diesel = { version = "2", features = ["postgres", "r2d2", "uuid", "chrono"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }

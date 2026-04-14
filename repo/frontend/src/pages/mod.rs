@@ -6,3 +6,4 @@ pub mod inventory;
 pub mod import_export;
 pub mod configuration;
 pub mod forbidden;
+pub mod security_settings;

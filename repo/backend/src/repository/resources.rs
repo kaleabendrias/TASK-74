@@ -59,6 +59,7 @@ pub struct ResourceUpdate {
     pub address: Option<Option<String>>,
     pub latitude: Option<Option<f64>>,
     pub longitude: Option<Option<f64>>,
+    pub contact_info_encrypted: Option<Option<Vec<u8>>>,
     pub state: Option<String>,
     pub scheduled_publish_at: Option<Option<DateTime<Utc>>>,
     pub current_version: Option<i32>,

@@ -120,6 +120,7 @@ pub struct UpdateResourceRequest {
     pub state: Option<String>,
     pub scheduled_publish_at: Option<String>,
     pub tz_offset_minutes: Option<i32>,
+    pub contact_info: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

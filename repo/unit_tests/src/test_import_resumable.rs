@@ -106,3 +106,136 @@ fn chunk_cursor_never_exceeds_total_rows() {
         );
     }
 }
+
+// ── Real DB-backed tests ───────────────────────────────────────────────────
+#[allow(unused_imports)]
+use diesel::prelude::*;
+//
+// These tests require a running PostgreSQL instance. The connection URL is
+// read from the DATABASE_URL environment variable (same test DB used by the
+// API tests). They are gated on that variable being present so that the pure
+// unit test suite can still be run offline.
+
+fn test_db_url() -> Option<String> {
+    std::env::var("DATABASE_URL").ok()
+}
+
+fn open_conn(url: &str) -> diesel::PgConnection {
+    use diesel::Connection;
+    diesel::PgConnection::establish(url)
+        .unwrap_or_else(|e| panic!("DB connection failed: {}", e))
+}
+
+/// Staging table created for a job must be visible in information_schema.
+#[test]
+fn staging_table_exists_after_create() {
+    let Some(url) = test_db_url() else { return };
+    let mut conn = open_conn(&url);
+    let name = format!("_test_staging_{}", uuid::Uuid::new_v4().to_string().replace('-', "_"));
+
+    tourism_backend::jobs::runner::create_staging_table(&mut conn, &name)
+        .expect("create_staging_table should not fail");
+
+    assert!(
+        tourism_backend::jobs::runner::staging_table_exists(&mut conn, &name),
+        "Staging table '{}' should exist after creation", name
+    );
+
+    // Clean up
+    tourism_backend::jobs::runner::drop_staging_table(&mut conn, &name);
+}
+
+/// After dropping a staging table it must no longer be reported as existing.
+#[test]
+fn staging_table_absent_after_drop() {
+    let Some(url) = test_db_url() else { return };
+    let mut conn = open_conn(&url);
+    let name = format!("_test_staging_{}", uuid::Uuid::new_v4().to_string().replace('-', "_"));
+
+    tourism_backend::jobs::runner::create_staging_table(&mut conn, &name).unwrap();
+    tourism_backend::jobs::runner::drop_staging_table(&mut conn, &name);
+
+    assert!(
+        !tourism_backend::jobs::runner::staging_table_exists(&mut conn, &name),
+        "Staging table '{}' should not exist after being dropped", name
+    );
+}
+
+/// The cursor persisted in the import_jobs table by update_job_progress must
+/// be readable back after the write.
+#[test]
+fn cursor_persisted_in_db() {
+    use tourism_backend::repository::import_jobs as repo;
+
+    let Some(url) = test_db_url() else { return };
+    let mut conn = open_conn(&url);
+
+    // We need a valid user UUID for the created_by FK. Use a nil UUID and
+    // skip the FK check by inserting directly via raw SQL.
+    let creator_id = uuid::Uuid::nil();
+    // Ensure the nil user exists (ignore conflict).
+    diesel::sql_query(
+        "INSERT INTO users (id, username, password_hash, role, mfa_enabled) \
+         VALUES ('00000000-0000-0000-0000-000000000000', '_test_cursor_user', 'x', 'Administrator', false) \
+         ON CONFLICT (id) DO NOTHING"
+    ).execute(&mut conn).ok();
+
+    let job = repo::insert_job(&mut conn, &repo::NewImportJob {
+        job_type: "test",
+        file_path: "/dev/null",
+        status: "running",
+        created_by: creator_id,
+    }).expect("insert_job");
+
+    // Advance cursor to 250 rows out of 500.
+    repo::update_job_progress(&mut conn, job.id, 250, 500, 50)
+        .expect("update_job_progress");
+
+    let loaded = repo::find_job(&mut conn, job.id).expect("find_job");
+    assert_eq!(loaded.processed_rows, 250, "processed_rows cursor must be 250");
+    assert_eq!(loaded.total_rows, 500);
+    assert_eq!(loaded.progress_percent, 50);
+
+    // Clean up
+    diesel::sql_query(format!("DELETE FROM import_jobs WHERE id = '{}'", job.id))
+        .execute(&mut conn).ok();
+}
+
+/// update_staging_table_name must persist the staging table name so that a
+/// subsequent find_job read returns the same name.
+#[test]
+fn staging_table_name_persisted_in_job() {
+    use tourism_backend::repository::import_jobs as repo;
+
+    let Some(url) = test_db_url() else { return };
+    let mut conn = open_conn(&url);
+
+    // Ensure nil user exists.
+    diesel::sql_query(
+        "INSERT INTO users (id, username, password_hash, role, mfa_enabled) \
+         VALUES ('00000000-0000-0000-0000-000000000000', '_test_cursor_user', 'x', 'Administrator', false) \
+         ON CONFLICT (id) DO NOTHING"
+    ).execute(&mut conn).ok();
+
+    let job = repo::insert_job(&mut conn, &repo::NewImportJob {
+        job_type: "test",
+        file_path: "/dev/null",
+        status: "running",
+        created_by: uuid::Uuid::nil(),
+    }).expect("insert_job");
+
+    let staging_name = format!("_import_{}", job.id.to_string().replace('-', "_"));
+    repo::update_staging_table_name(&mut conn, job.id, &staging_name)
+        .expect("update_staging_table_name");
+
+    let loaded = repo::find_job(&mut conn, job.id).expect("find_job");
+    assert_eq!(
+        loaded.staging_table_name.as_deref(),
+        Some(staging_name.as_str()),
+        "staging_table_name must match what was saved"
+    );
+
+    // Clean up
+    diesel::sql_query(format!("DELETE FROM import_jobs WHERE id = '{}'", job.id))
+        .execute(&mut conn).ok();
+}
