@@ -43,6 +43,7 @@ pub async fn get(
     ctx: RbacContext,
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse, ApiError> {
+    require_role!(ctx, Administrator, Publisher, Reviewer, Clinician);
     let lodging_id = path.into_inner();
     let mut conn = state.db_pool.get()?;
     let row = lodging_repo::find_lodging_by_id(&mut conn, lodging_id)
@@ -58,6 +59,7 @@ pub async fn list(
     state: web::Data<AppState>,
     ctx: RbacContext,
 ) -> Result<HttpResponse, ApiError> {
+    require_role!(ctx, Administrator, Publisher, Reviewer, Clinician);
     let mut conn = state.db_pool.get()?;
     let scope = ctx.scope_facility();
     let lodgings = svc::list_lodgings(&mut conn, scope)?;
@@ -91,6 +93,7 @@ pub async fn get_periods(
     ctx: RbacContext,
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse, ApiError> {
+    require_role!(ctx, Administrator, Publisher, Reviewer, Clinician);
     let lodging_id = path.into_inner();
     let mut conn = state.db_pool.get()?;
     let row = lodging_repo::find_lodging_by_id(&mut conn, lodging_id)

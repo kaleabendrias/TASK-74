@@ -71,6 +71,7 @@ async fn main() -> std::io::Result<()> {
     run_migrations(&pool);
     seed_defaults(&pool);
     jobs::spawn_job_runner(pool.clone());
+    jobs::spawn_scheduled_publisher(pool.clone());
 
     let bind_addr = format!("{}:{}", cfg.server.bind_address, cfg.server.bind_port);
     let tls_config = load_rustls_config(&cfg.tls);

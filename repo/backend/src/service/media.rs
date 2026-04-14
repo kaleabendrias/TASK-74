@@ -51,9 +51,7 @@ pub fn process_upload(
     let mime_ok = match ext.as_str() {
         "jpg" | "jpeg" => mime_type == "image/jpeg",
         "png" => mime_type == "image/png",
-        "webp" => mime_type == "image/webp",
         "mp4" => mime_type == "video/mp4",
-        "pdf" => mime_type == "application/pdf",
         _ => false,
     };
     if !mime_ok {

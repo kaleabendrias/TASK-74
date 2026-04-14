@@ -106,6 +106,19 @@ impl ApiError {
         }
     }
 
+    /// Returns a 200 OK-shaped response indicating MFA is required.
+    /// Uses status 401 with a special code so the frontend can detect it.
+    pub fn mfa_challenge() -> Self {
+        Self {
+            status: StatusCode::UNAUTHORIZED,
+            body: ApiErrorBody {
+                code: "MFA_REQUIRED".to_string(),
+                message: "Multi-factor authentication required. Please provide a TOTP code.".to_string(),
+                details: vec![],
+            },
+        }
+    }
+
     /// Creates a 500 Internal Server Error.
     pub fn internal(message: &str) -> Self {
         Self {

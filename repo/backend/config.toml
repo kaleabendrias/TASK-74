@@ -1,3 +1,7 @@
+# SECURITY: Secret values in this file are development-only defaults.
+# In production deployments, override all values in [auth] and [crypto]
+# via environment variables or mounted secret files.
+#
 # Configuration defaults. In production, override secrets via environment
 # variables or Docker secrets mounted at runtime. The values below are
 # development-only defaults and MUST NOT be used in production.
@@ -37,8 +41,8 @@ digits = 6
 period_secs = 30
 
 [uploads]
-max_size_bytes = 10485760
-allowed_mimes = ["image/jpeg", "image/png", "image/webp", "application/pdf"]
+max_size_bytes = 52428800
+allowed_mimes = ["image/jpeg", "image/png", "video/mp4"]
 storage_path = "/app/uploads"
 
 [features]

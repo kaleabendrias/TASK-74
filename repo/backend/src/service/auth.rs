@@ -31,7 +31,8 @@ pub fn login(
     if user.mfa_enabled && config.features.mfa_enabled {
         match totp_code {
             None => {
-                return Err(ApiError::unprocessable("MFA_REQUIRED", "TOTP code required"));
+                // Return a challenge response, not an error
+                return Err(ApiError::mfa_challenge());
             }
             Some(code) => {
                 if let Some(ref secret) = user.totp_secret {

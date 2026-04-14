@@ -16,8 +16,10 @@ pub async fn create(
 ) -> Result<HttpResponse, ApiError> {
     require_role!(ctx, Administrator, Publisher);
 
+    let facility_id = ctx.facility_id; // Assign creator's facility
+
     let mut conn = state.db_pool.get()?;
-    let resource = svc::create_resource(&mut conn, &body, ctx.user_id, &state.config.crypto.aes256_master_key)?;
+    let resource = svc::create_resource(&mut conn, &body, ctx.user_id, &state.config.crypto.aes256_master_key, facility_id)?;
     Ok(HttpResponse::Created().json(resource))
 }
 
@@ -34,10 +36,14 @@ pub async fn get(
 
     // Enforce facility scoping if the user is facility-scoped
     if let Some(fid) = ctx.scope_facility() {
-        if let Some(resource_fid) = resource.facility_id {
-            if fid != resource_fid {
+        match resource.facility_id {
+            Some(rfid) if rfid != fid => {
                 return Err(ApiError::forbidden("Access denied: resource belongs to a different facility"));
             }
+            None => {
+                return Err(ApiError::forbidden("Access denied: resource has no facility assignment"));
+            }
+            _ => {}
         }
     }
 

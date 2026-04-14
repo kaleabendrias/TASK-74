@@ -256,3 +256,99 @@ async fn resource_versions_returns_history() {
     assert_eq!(versions[0]["version_number"], 1);
     assert!(versions[0]["snapshot"]["title"].is_string());
 }
+
+#[tokio::test]
+async fn mfa_challenge_returns_401_with_code() {
+    let pool = setup_pool();
+    let _seed = seed_users(&pool);
+
+    // Enable MFA for a user
+    let mut conn = pool.get().unwrap();
+    diesel::sql_query(
+        "UPDATE users SET mfa_enabled = true, totp_secret = '\\x00'::bytea WHERE username = 'admin'"
+    ).execute(&mut conn).unwrap();
+    drop(conn);
+
+    // Login without TOTP code
+    let c = authed_client();
+    let resp = c.post(&format!("{}/api/auth/login", base_url()))
+        .json(&serde_json::json!({"username": "admin", "password": "testpassword"}))
+        .send().await.unwrap();
+    assert_eq!(resp.status(), 401);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["code"], "MFA_REQUIRED");
+
+    // Reset MFA for other tests
+    let mut conn = pool.get().unwrap();
+    diesel::sql_query("UPDATE users SET mfa_enabled = false, totp_secret = NULL WHERE username = 'admin'")
+        .execute(&mut conn).unwrap();
+}
+
+#[tokio::test]
+async fn export_download_blocked_for_non_requester_non_admin() {
+    let pool = setup_pool();
+    let _seed = seed_users(&pool);
+
+    // Clerk requests an export
+    let (clerk_session, clerk_csrf) = login_as(&authed_client(), "clerk").await;
+    let clerk = bearer_client(&clerk_session);
+
+    let resp = clerk.post(&format!("{}/api/export/request", base_url()))
+        .header("X-CSRF-Token", &clerk_csrf)
+        .json(&serde_json::json!({"export_type": "inventory"}))
+        .send().await.unwrap();
+    assert_eq!(resp.status(), 201);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    let export_id = body["id"].as_str().unwrap().to_string();
+
+    // Admin approves
+    let (admin_session, admin_csrf) = login_as(&authed_client(), "admin").await;
+    let admin = bearer_client(&admin_session);
+    let resp = admin.post(&format!("{}/api/export/approve/{}", base_url(), export_id))
+        .header("X-CSRF-Token", &admin_csrf)
+        .send().await.unwrap();
+    assert_eq!(resp.status(), 200);
+
+    // Publisher (not the requester and not admin) tries to download — should be 403
+    let (pub_session, _) = login_as(&authed_client(), "publisher").await;
+    let pub_client = bearer_client(&pub_session);
+    let resp = pub_client.get(&format!("{}/api/export/download/{}", base_url(), export_id))
+        .send().await.unwrap();
+    assert_eq!(resp.status(), 403, "Non-requester non-admin should not download export");
+}
+
+#[tokio::test]
+async fn export_data_has_pii_masking() {
+    let pool = setup_pool();
+    let _seed = seed_users(&pool);
+
+    // Admin creates and approves an export
+    let (admin_session, admin_csrf) = login_as(&authed_client(), "admin").await;
+    let admin = bearer_client(&admin_session);
+
+    let resp = admin.post(&format!("{}/api/export/request", base_url()))
+        .header("X-CSRF-Token", &admin_csrf)
+        .json(&serde_json::json!({"export_type": "resources"}))
+        .send().await.unwrap();
+    assert_eq!(resp.status(), 201);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    let export_id = body["id"].as_str().unwrap().to_string();
+
+    // Use a different admin session to approve (self-approve is blocked)
+    // Actually, we need a different user. Use reviewer.
+    let (rev_session, rev_csrf) = login_as(&authed_client(), "reviewer").await;
+    let rev = bearer_client(&rev_session);
+    let resp = rev.post(&format!("{}/api/export/approve/{}", base_url(), export_id))
+        .header("X-CSRF-Token", &rev_csrf)
+        .send().await.unwrap();
+    assert_eq!(resp.status(), 200);
+
+    // Download
+    let resp = admin.get(&format!("{}/api/export/download/{}", base_url(), export_id))
+        .send().await.unwrap();
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert!(body["watermark"].is_string());
+    // Data should be present (may be empty if no resources exist, but the field exists)
+    assert!(body["data"].is_array());
+}

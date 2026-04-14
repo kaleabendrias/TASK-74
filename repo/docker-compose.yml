@@ -1,3 +1,7 @@
+# SECURITY: The secret values below are for local development only.
+# In production, override via Docker secrets, CI/CD env injection, or a
+# secrets manager. Never commit production credentials to version control.
+
 services:
   db:
     image: postgres:16-alpine

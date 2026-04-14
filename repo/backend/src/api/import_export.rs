@@ -137,42 +137,50 @@ pub async fn download_export(
 
     let watermark = approval.watermark_text.as_deref().unwrap_or("no-watermark");
 
+    // Facility-scoped export: Clinicians and InventoryClerks only see their facility's data
+    let facility_clause = match ctx.scope_facility() {
+        Some(fid) => format!("WHERE facility_id = '{}'", fid),
+        None => String::new(),
+    };
+
     // Query real data based on export_type
-    let data: serde_json::Value = match approval.export_type.as_str() {
+    let mut data: serde_json::Value = match approval.export_type.as_str() {
         "resources" => {
-            let rows: Vec<serde_json::Value> = diesel::sql_query(
-                "SELECT row_to_json(r) as doc FROM resources r ORDER BY created_at DESC LIMIT 1000"
-            ).load::<crate::repository::JsonRow>(&mut conn)
+            let q = format!("SELECT row_to_json(r) as doc FROM resources r {} ORDER BY created_at DESC LIMIT 1000", facility_clause);
+            let rows: Vec<serde_json::Value> = diesel::sql_query(q)
+            .load::<crate::repository::JsonRow>(&mut conn)
             .unwrap_or_default()
             .into_iter().map(|r| r.doc).collect();
             serde_json::json!(rows)
         }
         "lodgings" => {
-            let rows: Vec<serde_json::Value> = diesel::sql_query(
-                "SELECT row_to_json(l) as doc FROM lodgings l ORDER BY created_at DESC LIMIT 1000"
-            ).load::<crate::repository::JsonRow>(&mut conn)
+            let q = format!("SELECT row_to_json(l) as doc FROM lodgings l {} ORDER BY created_at DESC LIMIT 1000", facility_clause);
+            let rows: Vec<serde_json::Value> = diesel::sql_query(q)
+            .load::<crate::repository::JsonRow>(&mut conn)
             .unwrap_or_default()
             .into_iter().map(|r| r.doc).collect();
             serde_json::json!(rows)
         }
         "inventory" => {
-            let rows: Vec<serde_json::Value> = diesel::sql_query(
-                "SELECT row_to_json(i) as doc FROM inventory_lots i ORDER BY created_at DESC LIMIT 1000"
-            ).load::<crate::repository::JsonRow>(&mut conn)
+            let q = format!("SELECT row_to_json(i) as doc FROM inventory_lots i {} ORDER BY created_at DESC LIMIT 1000", facility_clause);
+            let rows: Vec<serde_json::Value> = diesel::sql_query(q)
+            .load::<crate::repository::JsonRow>(&mut conn)
             .unwrap_or_default()
             .into_iter().map(|r| r.doc).collect();
             serde_json::json!(rows)
         }
         "transactions" => {
-            let rows: Vec<serde_json::Value> = diesel::sql_query(
-                "SELECT row_to_json(t) as doc FROM inventory_transactions t ORDER BY created_at DESC LIMIT 1000"
-            ).load::<crate::repository::JsonRow>(&mut conn)
+            let q = format!("SELECT row_to_json(t) as doc FROM inventory_transactions t {} ORDER BY created_at DESC LIMIT 1000", facility_clause);
+            let rows: Vec<serde_json::Value> = diesel::sql_query(q)
+            .load::<crate::repository::JsonRow>(&mut conn)
             .unwrap_or_default()
             .into_iter().map(|r| r.doc).collect();
             serde_json::json!(rows)
         }
         _ => serde_json::json!([]),
     };
+
+    mask_pii_fields(&mut data);
 
     let export_data = serde_json::json!({
         "export_type": approval.export_type,
@@ -188,4 +196,54 @@ pub async fn download_export(
             format!("attachment; filename=\"export_{}.json\"", approval.id),
         ))
         .json(export_data))
+}
+
+/// Masks PII fields in export data rows.
+fn mask_pii_fields(data: &mut serde_json::Value) {
+    if let Some(arr) = data.as_array_mut() {
+        for row in arr.iter_mut() {
+            if let Some(obj) = row.as_object_mut() {
+                // Mask email-like fields
+                for key in &["email", "contact_email", "contact_info"] {
+                    if let Some(val) = obj.get_mut(*key) {
+                        if let Some(s) = val.as_str() {
+                            *val = serde_json::Value::String(mask_email(s));
+                        }
+                    }
+                }
+                // Mask phone-like fields
+                for key in &["phone", "contact_phone", "phone_number"] {
+                    if let Some(val) = obj.get_mut(*key) {
+                        if let Some(s) = val.as_str() {
+                            *val = serde_json::Value::String(mask_phone(s));
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn mask_email(email: &str) -> String {
+    match email.split_once('@') {
+        Some((local, domain)) => {
+            if local.len() <= 2 {
+                format!("{}***@{}", &local[..1], domain)
+            } else {
+                format!("{}***{}@{}", &local[..1], &local[local.len()-1..], domain)
+            }
+        }
+        None => "***".to_string(),
+    }
+}
+
+fn mask_phone(phone: &str) -> String {
+    let digits: Vec<char> = phone.chars().filter(|c| c.is_ascii_digit()).collect();
+    if digits.len() >= 10 {
+        let area: String = digits[..3].iter().collect();
+        let last4: String = digits[digits.len()-4..].iter().collect();
+        format!("({}) ***-{}", area, last4)
+    } else {
+        "***-****".to_string()
+    }
 }

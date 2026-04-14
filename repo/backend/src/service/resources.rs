@@ -15,6 +15,7 @@ pub fn create_resource(
     req: &CreateResourceRequest,
     user_id: Uuid,
     master_key: &str,
+    facility_id: Option<Uuid>,
 ) -> Result<ResourceResponse, ApiError> {
     let mut errors = vec![];
 
@@ -82,7 +83,7 @@ pub fn create_resource(
         scheduled_publish_at: scheduled,
         current_version: 1,
         created_by: user_id,
-        facility_id: None,
+        facility_id,
     };
 
     let row = resources::insert(conn, &new)?;

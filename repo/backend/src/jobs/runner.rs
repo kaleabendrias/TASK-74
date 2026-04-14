@@ -74,12 +74,12 @@ fn process_xlsx_job(
     let total_rows = (rows.len() - 1) as i32;
     import_jobs::update_job_progress(conn, job.id, 0, total_rows, 0)?;
 
-    // Parse all rows, collecting errors per-row
-    let mut valid_rows: Vec<(i32, serde_json::Map<String, serde_json::Value>)> = Vec::new();
+    // Phase 1: Parse and validate ALL rows — fail fast on any error
+    let mut parsed_rows: Vec<serde_json::Map<String, serde_json::Value>> = Vec::new();
     let mut errors: Vec<String> = Vec::new();
 
     for (i, row) in rows.iter().skip(1).enumerate() {
-        let row_num = (i + 1) as i32;
+        let row_num = i + 1;
         let mut obj = serde_json::Map::new();
         let mut row_errors = Vec::new();
 
@@ -88,81 +88,124 @@ fn process_xlsx_job(
             let val = cell.to_string().trim().to_string();
             obj.insert(key.clone(), serde_json::Value::String(val.clone()));
 
-            // Validate required fields
             if key == "item_name" && val.is_empty() {
-                row_errors.push(format!("missing required field 'item_name'"));
+                row_errors.push("missing required field 'item_name'".to_string());
             }
-            if key == "quantity_on_hand" {
-                if val.parse::<i32>().is_err() {
-                    row_errors.push(format!("invalid integer for 'quantity_on_hand': '{}'", val));
-                }
+            if key == "quantity_on_hand" && val.parse::<i32>().is_err() {
+                row_errors.push(format!("invalid integer for 'quantity_on_hand': '{}'", val));
             }
         }
 
-        if row_errors.is_empty() {
-            valid_rows.push((row_num, obj));
-        } else {
+        if !row_errors.is_empty() {
             errors.push(format!("Row {}: {}", row_num, row_errors.join("; ")));
         }
+        parsed_rows.push(obj);
     }
 
-    if valid_rows.is_empty() {
+    // Fail fast: if ANY row has errors, abort before touching the target table
+    if !errors.is_empty() {
         let log = errors.join("\n");
-        return Err(format!("All {} rows invalid:\n{}", errors.len(), log).into());
+        import_jobs::mark_job_failed(conn, job.id, &log)?;
+        return Err(format!("{} of {} rows failed validation:\n{}", errors.len(), total_rows, log).into());
     }
 
-    // Atomic staging-to-target commit
-    let insert_count = valid_rows.len() as i32;
-    let result = conn.transaction(|tx_conn| {
-        for (_row_num, obj) in &valid_rows {
-            // Extract fields for inventory_lots — use sensible defaults for missing columns
-            let item_name = obj.get("item_name").and_then(|v| v.as_str()).unwrap_or("").to_string();
-            let lot_number = obj.get("lot_number").and_then(|v| v.as_str()).unwrap_or("IMPORTED").to_string();
+    // Phase 2: Atomic staging-to-target commit
+    let row_count = parsed_rows.len() as i32;
+    let staging = format!("_staging_{}", job.id.to_string().replace('-', "_"));
+
+    conn.transaction(|tx| {
+        // Create staging table matching target schema
+        diesel::sql_query(format!(
+            "CREATE TEMP TABLE {} (\
+             facility_id UUID, warehouse_id UUID, bin_id UUID, \
+             item_name TEXT, lot_number TEXT, quantity_on_hand INT\
+             )", staging
+        )).execute(tx)?;
+
+        // Insert validated rows into staging
+        for obj in &parsed_rows {
+            let item   = obj.get("item_name").and_then(|v| v.as_str()).unwrap_or("");
+            let lot    = obj.get("lot_number").and_then(|v| v.as_str()).unwrap_or("IMPORTED");
             let qty: i32 = obj.get("quantity_on_hand").and_then(|v| v.as_str())
                 .and_then(|s| s.parse().ok()).unwrap_or(0);
-            let facility_id = obj.get("facility_id").and_then(|v| v.as_str()).unwrap_or("00000000-0000-0000-0000-000000000001");
-            let warehouse_id = obj.get("warehouse_id").and_then(|v| v.as_str()).unwrap_or("00000000-0000-0000-0000-000000000002");
-            let bin_id = obj.get("bin_id").and_then(|v| v.as_str()).unwrap_or("00000000-0000-0000-0000-000000000003");
+            let fid = obj.get("facility_id").and_then(|v| v.as_str())
+                .unwrap_or("00000000-0000-0000-0000-000000000001");
+            let wid = obj.get("warehouse_id").and_then(|v| v.as_str())
+                .unwrap_or("00000000-0000-0000-0000-000000000002");
+            let bid = obj.get("bin_id").and_then(|v| v.as_str())
+                .unwrap_or("00000000-0000-0000-0000-000000000003");
 
-            diesel::sql_query(
-                "INSERT INTO inventory_lots (id, facility_id, warehouse_id, bin_id, item_name, lot_number, quantity_on_hand, quantity_reserved, created_at, updated_at) \
-                 VALUES (gen_random_uuid(), $1::uuid, $2::uuid, $3::uuid, $4, $5, $6, 0, now(), now())"
-            )
-            .bind::<diesel::sql_types::Text, _>(facility_id)
-            .bind::<diesel::sql_types::Text, _>(warehouse_id)
-            .bind::<diesel::sql_types::Text, _>(bin_id)
-            .bind::<diesel::sql_types::Text, _>(&item_name)
-            .bind::<diesel::sql_types::Text, _>(&lot_number)
+            diesel::sql_query(format!(
+                "INSERT INTO {} (facility_id,warehouse_id,bin_id,item_name,lot_number,quantity_on_hand) \
+                 VALUES ($1::uuid,$2::uuid,$3::uuid,$4,$5,$6)", staging
+            ))
+            .bind::<diesel::sql_types::Text, _>(fid)
+            .bind::<diesel::sql_types::Text, _>(wid)
+            .bind::<diesel::sql_types::Text, _>(bid)
+            .bind::<diesel::sql_types::Text, _>(item)
+            .bind::<diesel::sql_types::Text, _>(lot)
             .bind::<diesel::sql_types::Integer, _>(qty)
-            .execute(tx_conn)?;
+            .execute(tx)?;
         }
 
-        // Record the import in audit_log
+        // Single INSERT...SELECT from staging to target
+        diesel::sql_query(format!(
+            "INSERT INTO inventory_lots \
+             (id, facility_id, warehouse_id, bin_id, item_name, lot_number, \
+              quantity_on_hand, quantity_reserved, created_at, updated_at) \
+             SELECT gen_random_uuid(), facility_id, warehouse_id, bin_id, \
+                    item_name, lot_number, quantity_on_hand, 0, now(), now() \
+             FROM {}", staging
+        )).execute(tx)?;
+
+        // Clean up staging
+        diesel::sql_query(format!("DROP TABLE {}", staging)).execute(tx)?;
+
+        // Audit entry
         diesel::sql_query(format!(
             "INSERT INTO audit_log (id, actor_id, action, entity_type, detail, created_at) \
              VALUES (gen_random_uuid(), '{}', 'bulk_import', 'inventory_lots', \
-             '{}'::jsonb, now())",
-            job.created_by,
-            serde_json::json!({"rows_imported": insert_count, "job_id": job.id.to_string()}).to_string().replace('\'', "''")
-        )).execute(tx_conn)?;
+             '{{}}'::jsonb, now())", job.created_by
+        )).execute(tx)?;
 
         Ok::<_, diesel::result::Error>(())
-    });
+    }).map_err(|e| {
+        tracing::error!(job_id = %job.id, error = %e, "Import transaction rolled back");
+        format!("Transaction rolled back: {}", e)
+    })?;
 
-    match result {
-        Ok(()) => {
-            import_jobs::update_job_progress(conn, job.id, insert_count, total_rows,
-                ((insert_count as f64 / total_rows as f64) * 100.0) as i16)?;
-            if !errors.is_empty() {
-                import_jobs::mark_job_failed(conn, job.id, &errors.join("\n"))?;
-                return Err(format!("{} of {} rows failed validation", errors.len(), total_rows).into());
+    import_jobs::update_job_progress(conn, job.id, row_count, total_rows, 100)?;
+    Ok(())
+}
+
+/// Spawns a background task that publishes resources whose scheduled_publish_at has arrived.
+pub fn spawn_scheduled_publisher(pool: DbPool) {
+    tokio::spawn(async move {
+        let interval = Duration::from_secs(30);
+        loop {
+            if let Err(e) = publish_scheduled(&pool) {
+                tracing::error!(error = %e, "Scheduled publisher cycle failed");
             }
+            time::sleep(interval).await;
         }
-        Err(e) => {
-            tracing::error!(job_id = %job.id, error = %e, "Import transaction rolled back");
-            return Err(format!("Transaction rolled back: {}", e).into());
-        }
-    }
+    });
+}
 
+fn publish_scheduled(pool: &DbPool) -> Result<(), Box<dyn std::error::Error>> {
+    let mut conn = pool.get()?;
+    let now = chrono::Utc::now();
+
+    let count = diesel::sql_query(
+        "UPDATE resources SET state = 'published', updated_at = now() \
+         WHERE scheduled_publish_at <= $1 \
+         AND scheduled_publish_at IS NOT NULL \
+         AND state IN ('draft', 'in_review')"
+    )
+    .bind::<diesel::sql_types::Timestamptz, _>(now)
+    .execute(&mut conn)?;
+
+    if count > 0 {
+        tracing::info!(count = count, "Published {} scheduled resources", count);
+    }
     Ok(())
 }
