@@ -16,6 +16,8 @@ pub struct AppConfig {
     pub prometheus: PrometheusConfig,
     pub canary: CanaryConfig,
     pub app: AppMetaConfig,
+    #[serde(default)]
+    pub mq: MqConfig,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -123,6 +125,60 @@ pub struct AppMetaConfig {
     pub config_profile: String,
     pub service_name: String,
     pub version: String,
+}
+
+/// Optional on-prem Message Queue connector configuration.
+///
+/// Two transports are supported; they share the same HMAC-signed message envelope
+/// so the signing key (`auth.request_signing_key`) covers both.
+///
+/// ## TCP transport (default)
+///
+/// Set `mq.enabled = true` and leave `mq.amqp_url` unset.
+/// The application binds a raw TCP socket on `mq.bind_address`.
+/// On-prem systems connect and send UTF-8 newline-terminated JSON objects,
+/// one message per line:
+/// ```json
+/// {"Authorization":"<hmac>","X-Nonce":"<uuid>","X-Timestamp":"<unix_ts>","body":{...}}\n
+/// ```
+///
+/// ## AMQP transport (RabbitMQ / compatible broker)
+///
+/// Set `mq.enabled = true` and provide `mq.amqp_url`
+/// (e.g. `amqp://user:pass@rabbitmq:5672/%2F`).
+/// Set `mq.amqp_queue` to the queue name the consumer should read from
+/// (defaults to `"tourism_inbound"`).
+/// Each AMQP message payload must be the same JSON envelope as above
+/// (without the trailing newline).  The consumer acks on success and
+/// nacks (with `requeue = false`) on validation failure.
+#[derive(Debug, Clone, Deserialize)]
+pub struct MqConfig {
+    /// Whether to start the MQ connector. Defaults to false.
+    #[serde(default)]
+    pub enabled: bool,
+    /// TCP bind address used when `amqp_url` is not set. Defaults to `127.0.0.1:9999`.
+    #[serde(default = "default_mq_bind")]
+    pub bind_address: String,
+    /// AMQP broker URL (e.g. `amqp://user:pass@host:5672/%2F`).
+    /// When set, the AMQP consumer is used instead of the raw TCP listener.
+    pub amqp_url: Option<String>,
+    /// Name of the AMQP queue to consume from. Defaults to `"tourism_inbound"`.
+    #[serde(default = "default_amqp_queue")]
+    pub amqp_queue: String,
+}
+
+fn default_mq_bind() -> String { "127.0.0.1:9999".to_string() }
+fn default_amqp_queue() -> String { "tourism_inbound".to_string() }
+
+impl Default for MqConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            bind_address: default_mq_bind(),
+            amqp_url: None,
+            amqp_queue: default_amqp_queue(),
+        }
+    }
 }
 
 impl AppConfig {

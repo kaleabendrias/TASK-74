@@ -26,3 +26,9 @@ mod test_near_expiry;
 mod test_night_bounds;
 #[cfg(test)]
 mod test_import_validation;
+#[cfg(test)]
+mod test_tz_scheduling;
+#[cfg(test)]
+mod test_export_watermark;
+#[cfg(test)]
+mod test_import_resumable;

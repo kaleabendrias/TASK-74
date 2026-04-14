@@ -49,11 +49,13 @@ pub fn create_export_request(
 }
 
 /// Approves a pending export request, enforcing that the approver differs from the requester.
+/// Watermark generation is gated behind the `watermark_enabled` feature flag.
 pub fn approve_export(
     conn: &mut PgConnection,
     id: Uuid,
     approver_id: Uuid,
     approver_username: &str,
+    watermark_enabled: bool,
 ) -> Result<ExportApprovalResponse, ApiError> {
     let existing = export_repo::find_approval(conn, id)?;
     if existing.status != "pending" {
@@ -68,7 +70,11 @@ pub fn approve_export(
         ));
     }
 
-    let watermark = format!("{}@{}", approver_username, chrono::Utc::now().format("%Y%m%d%H%M%S"));
+    let watermark = if watermark_enabled {
+        format!("{}@{}", approver_username, chrono::Utc::now().format("%Y%m%d%H%M%S"))
+    } else {
+        String::new()
+    };
     let row = export_repo::approve_export(conn, id, approver_id, &watermark)?;
     Ok(approval_to_response(&row))
 }

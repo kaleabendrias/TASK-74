@@ -4,6 +4,7 @@ use diesel::r2d2::{ConnectionManager, Pool};
 use diesel::PgConnection;
 use std::time::Duration;
 use tokio::time;
+use uuid;
 
 use crate::repository::import_jobs;
 
@@ -52,12 +53,59 @@ fn poll_and_process(pool: &DbPool) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// Chunk size for chunked staging inserts. After each chunk the cursor
+/// (processed_rows) is written to the DB, enabling resume on retry.
+const IMPORT_CHUNK_SIZE: usize = 500;
+
 fn process_xlsx_job(
     conn: &mut PgConnection,
     job: &import_jobs::ImportJobRow,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use diesel::Connection;
 
+    // ── Determine whether this is a fresh start or a resume ──
+    //
+    // If `staging_table_name` is set the job failed mid-processing on a
+    // previous attempt. We check whether the persistent staging table still
+    // exists; if it does we skip validation and resume row ingestion from
+    // `processed_rows` (the committed cursor).  If the table was lost (e.g. a
+    // DB restart dropped it) we fall back to a full re-run.
+
+    let staging = match &job.staging_table_name {
+        Some(name) => {
+            // Verify the table still exists in the public schema
+            let exists: bool = diesel::sql_query(format!(
+                "SELECT EXISTS (SELECT 1 FROM information_schema.tables \
+                 WHERE table_schema = 'public' AND table_name = '{}')", name
+            ))
+            .load::<BoolRow>(conn)
+            .map(|rows| rows.first().map(|r| r.exists).unwrap_or(false))
+            .unwrap_or(false);
+
+            if exists {
+                tracing::info!(
+                    job_id = %job.id,
+                    staging = %name,
+                    cursor = job.processed_rows,
+                    "Resuming import job from saved cursor"
+                );
+                name.clone()
+            } else {
+                tracing::warn!(
+                    job_id = %job.id,
+                    staging = %name,
+                    "Staging table no longer exists — restarting from row 0"
+                );
+                String::new()
+            }
+        }
+        None => String::new(),
+    };
+
+    let is_resume = !staging.is_empty();
+    let resume_cursor = if is_resume { job.processed_rows as usize } else { 0 };
+
+    // ── Parse workbook ──
     let mut workbook: Xlsx<_> = open_workbook(&job.file_path)?;
     let sheet_name = workbook.sheet_names().first().cloned()
         .ok_or("No sheets in workbook")?;
@@ -75,68 +123,103 @@ fn process_xlsx_job(
     if total_rows > 10_000 {
         return Err(format!("Import exceeds maximum of 10,000 rows ({} rows found)", total_rows).into());
     }
-    import_jobs::update_job_progress(conn, job.id, 0, total_rows, 0)?;
 
-    // Phase 1: Parse and validate ALL rows — fail fast on any error
-    let mut parsed_rows: Vec<serde_json::Map<String, serde_json::Value>> = Vec::new();
-    let mut errors: Vec<String> = Vec::new();
+    // ── Phase 1: Validate ALL rows (skipped when resuming with a live table) ──
+    let parsed_rows: Vec<serde_json::Map<String, serde_json::Value>> = if !is_resume {
+        import_jobs::update_job_progress(conn, job.id, 0, total_rows, 0)?;
 
-    for (i, row) in rows.iter().skip(1).enumerate() {
-        let row_num = i + 1;
-        let mut obj = serde_json::Map::new();
-        let mut row_errors = Vec::new();
+        let mut pr = Vec::new();
+        let mut errors: Vec<String> = Vec::new();
 
-        for (j, cell) in row.iter().enumerate() {
-            let key = header_names.get(j).cloned().unwrap_or_else(|| format!("col_{}", j));
-            let val = cell.to_string().trim().to_string();
-            obj.insert(key.clone(), serde_json::Value::String(val.clone()));
+        for (i, row) in rows.iter().skip(1).enumerate() {
+            let row_num = i + 1;
+            let mut obj = serde_json::Map::new();
+            let mut row_errors = Vec::new();
 
-            if key == "item_name" && val.is_empty() {
-                row_errors.push("missing required field 'item_name'".to_string());
+            for (j, cell) in row.iter().enumerate() {
+                let key = header_names.get(j).cloned().unwrap_or_else(|| format!("col_{}", j));
+                let val = cell.to_string().trim().to_string();
+                obj.insert(key.clone(), serde_json::Value::String(val.clone()));
+
+                if key == "item_name" && val.is_empty() {
+                    row_errors.push("missing required field 'item_name'".to_string());
+                }
+                if key == "quantity_on_hand" && val.parse::<i32>().is_err() {
+                    row_errors.push(format!("invalid integer for 'quantity_on_hand': '{}'", val));
+                }
+                // Validate UUID format for location fields when the column is present
+                if (key == "facility_id" || key == "warehouse_id" || key == "bin_id")
+                    && !val.is_empty()
+                    && uuid::Uuid::parse_str(&val).is_err()
+                {
+                    row_errors.push(format!("invalid UUID for '{}': '{}'", key, val));
+                }
             }
-            if key == "quantity_on_hand" && val.parse::<i32>().is_err() {
-                row_errors.push(format!("invalid integer for 'quantity_on_hand': '{}'", val));
+
+            // Require facility_id, warehouse_id, and bin_id as explicit non-empty columns
+            for req in &["facility_id", "warehouse_id", "bin_id"] {
+                match obj.get(*req).and_then(|v| v.as_str()) {
+                    None | Some("") => row_errors.push(format!("missing required field '{}'", req)),
+                    _ => {}
+                }
             }
+
+            if !row_errors.is_empty() {
+                errors.push(format!("Row {}: {}", row_num, row_errors.join("; ")));
+            }
+            pr.push(obj);
         }
 
-        if !row_errors.is_empty() {
-            errors.push(format!("Row {}: {}", row_num, row_errors.join("; ")));
+        // Fail fast: if ANY row has errors, abort before touching the target table
+        if !errors.is_empty() {
+            let log = errors.join("\n");
+            import_jobs::mark_job_failed(conn, job.id, &log)?;
+            return Err(format!("{} of {} rows failed validation:\n{}", errors.len(), total_rows, log).into());
         }
-        parsed_rows.push(obj);
-    }
 
-    // Fail fast: if ANY row has errors, abort before touching the target table
-    if !errors.is_empty() {
-        let log = errors.join("\n");
-        import_jobs::mark_job_failed(conn, job.id, &log)?;
-        return Err(format!("{} of {} rows failed validation:\n{}", errors.len(), total_rows, log).into());
-    }
+        pr
+    } else {
+        // Resume path: re-parse rows but skip already-committed rows below
+        rows.iter().skip(1).map(|row| {
+            let mut obj = serde_json::Map::new();
+            for (j, cell) in row.iter().enumerate() {
+                let key = header_names.get(j).cloned().unwrap_or_else(|| format!("col_{}", j));
+                let val = cell.to_string().trim().to_string();
+                obj.insert(key, serde_json::Value::String(val));
+            }
+            obj
+        }).collect()
+    };
 
-    // Phase 2: Atomic staging-to-target commit
-    let row_count = parsed_rows.len() as i32;
-    let staging = format!("_staging_{}", job.id.to_string().replace('-', "_"));
-
-    conn.transaction(|tx| {
-        // Create staging table matching target schema
+    // ── Phase 2: Create persistent staging table (new jobs only) ──
+    let staging = if !is_resume {
+        let name = format!("_import_{}", job.id.to_string().replace('-', "_"));
         diesel::sql_query(format!(
-            "CREATE TEMP TABLE {} (\
-             facility_id UUID, warehouse_id UUID, bin_id UUID, \
-             item_name TEXT, lot_number TEXT, quantity_on_hand INT\
-             )", staging
-        )).execute(tx)?;
+            "CREATE TABLE IF NOT EXISTS {} (\
+             facility_id UUID NOT NULL, warehouse_id UUID NOT NULL, bin_id UUID NOT NULL, \
+             item_name TEXT NOT NULL, lot_number TEXT NOT NULL, quantity_on_hand INT NOT NULL\
+             )", name
+        )).execute(conn)?;
+        // Persist the staging table name so retries can resume
+        import_jobs::update_staging_table_name(conn, job.id, &name)?;
+        name
+    } else {
+        staging
+    };
 
-        // Insert validated rows into staging
-        for obj in &parsed_rows {
-            let item   = obj.get("item_name").and_then(|v| v.as_str()).unwrap_or("");
-            let lot    = obj.get("lot_number").and_then(|v| v.as_str()).unwrap_or("IMPORTED");
+    // ── Phase 3: Chunked row ingestion into staging (resumable) ──
+    let rows_to_insert = &parsed_rows[resume_cursor..];
+    let mut committed_so_far = resume_cursor as i32;
+
+    for chunk in rows_to_insert.chunks(IMPORT_CHUNK_SIZE) {
+        for obj in chunk {
+            let item = obj.get("item_name").and_then(|v| v.as_str()).unwrap_or("");
+            let lot  = obj.get("lot_number").and_then(|v| v.as_str()).unwrap_or("IMPORTED");
             let qty: i32 = obj.get("quantity_on_hand").and_then(|v| v.as_str())
                 .and_then(|s| s.parse().ok()).unwrap_or(0);
-            let fid = obj.get("facility_id").and_then(|v| v.as_str())
-                .unwrap_or("00000000-0000-0000-0000-000000000001");
-            let wid = obj.get("warehouse_id").and_then(|v| v.as_str())
-                .unwrap_or("00000000-0000-0000-0000-000000000002");
-            let bid = obj.get("bin_id").and_then(|v| v.as_str())
-                .unwrap_or("00000000-0000-0000-0000-000000000003");
+            let fid = obj.get("facility_id").and_then(|v| v.as_str()).unwrap_or("");
+            let wid = obj.get("warehouse_id").and_then(|v| v.as_str()).unwrap_or("");
+            let bid = obj.get("bin_id").and_then(|v| v.as_str()).unwrap_or("");
 
             diesel::sql_query(format!(
                 "INSERT INTO {} (facility_id,warehouse_id,bin_id,item_name,lot_number,quantity_on_hand) \
@@ -148,10 +231,17 @@ fn process_xlsx_job(
             .bind::<diesel::sql_types::Text, _>(item)
             .bind::<diesel::sql_types::Text, _>(lot)
             .bind::<diesel::sql_types::Integer, _>(qty)
-            .execute(tx)?;
+            .execute(conn)?;
         }
 
-        // Single INSERT...SELECT from staging to target
+        // Commit the cursor after each chunk so retries can resume here
+        committed_so_far += chunk.len() as i32;
+        let pct = ((committed_so_far as f64 / total_rows as f64) * 90.0) as i16; // reserve last 10% for final commit
+        import_jobs::update_job_progress(conn, job.id, committed_so_far, total_rows, pct)?;
+    }
+
+    // ── Phase 4: Atomic final commit — staging → target ──
+    conn.transaction(|tx| {
         diesel::sql_query(format!(
             "INSERT INTO inventory_lots \
              (id, facility_id, warehouse_id, bin_id, item_name, lot_number, \
@@ -160,9 +250,6 @@ fn process_xlsx_job(
                     item_name, lot_number, quantity_on_hand, 0, now(), now() \
              FROM {}", staging
         )).execute(tx)?;
-
-        // Clean up staging
-        diesel::sql_query(format!("DROP TABLE {}", staging)).execute(tx)?;
 
         // Audit entry
         diesel::sql_query(format!(
@@ -173,12 +260,22 @@ fn process_xlsx_job(
 
         Ok::<_, diesel::result::Error>(())
     }).map_err(|e| {
-        tracing::error!(job_id = %job.id, error = %e, "Import transaction rolled back");
-        format!("Transaction rolled back: {}", e)
+        tracing::error!(job_id = %job.id, error = %e, "Import final commit rolled back");
+        format!("Final commit rolled back: {}", e)
     })?;
 
-    import_jobs::update_job_progress(conn, job.id, row_count, total_rows, 100)?;
+    // Drop the persistent staging table now that data is committed
+    diesel::sql_query(format!("DROP TABLE IF EXISTS {}", staging)).execute(conn)?;
+
+    import_jobs::update_job_progress(conn, job.id, total_rows, total_rows, 100)?;
     Ok(())
+}
+
+/// Helper for reading a boolean from a raw SQL EXISTS query.
+#[derive(diesel::QueryableByName, Debug)]
+struct BoolRow {
+    #[diesel(sql_type = diesel::sql_types::Bool)]
+    exists: bool,
 }
 
 /// Spawns a background task that publishes resources whose scheduled_publish_at has arrived.

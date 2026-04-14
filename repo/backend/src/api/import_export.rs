@@ -40,7 +40,7 @@ pub async fn upload_import(
                 file_data.extend_from_slice(&data);
                 // Enforce 50MB upload limit
                 if file_data.len() > 52_428_800 {
-                    return Err(ApiError::unprocessable(
+                    return Err(ApiError::payload_too_large(
                         "FILE_TOO_LARGE",
                         "Import file exceeds 50 MB limit",
                     ));
@@ -110,17 +110,22 @@ pub async fn get_job(
 }
 
 /// Creates a new export request that requires approval before download.
+/// Restricted to Administrators and Reviewers to prevent approval-queue spam
+/// and unauthorized data extraction.
 pub async fn request_export(
     state: web::Data<AppState>,
     ctx: RbacContext,
     body: web::Json<ExportRequest>,
 ) -> Result<HttpResponse, ApiError> {
+    require_role!(ctx, Administrator, Reviewer);
+
     let mut conn = state.db_pool.get()?;
     let approval = svc::create_export_request(&mut conn, &body.export_type, ctx.user_id)?;
     Ok(HttpResponse::Created().json(approval))
 }
 
-/// Approves a pending export request with a watermark.
+/// Approves a pending export request, optionally stamping a watermark when the
+/// `export_watermark` feature flag is enabled.
 pub async fn approve_export(
     state: web::Data<AppState>,
     ctx: RbacContext,
@@ -134,6 +139,7 @@ pub async fn approve_export(
         path.into_inner(),
         ctx.user_id,
         &ctx.username,
+        state.config.features.export_watermark,
     )?;
     Ok(HttpResponse::Ok().json(approval))
 }

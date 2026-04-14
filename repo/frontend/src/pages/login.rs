@@ -133,9 +133,6 @@ pub fn login_page() -> Html {
                         }
                     }
                     Err(e) => {
-                        if e.contains("MFA") || e.contains("TOTP") {
-                            show_mfa.set(true);
-                        }
                         error.set(Some(e));
                     }
                 }

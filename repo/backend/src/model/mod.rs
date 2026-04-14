@@ -249,6 +249,30 @@ pub struct RentChangeResponse {
 // Inventory
 // ────────────────────────────────────────
 
+#[derive(Debug, Serialize)]
+pub struct WarehouseResponse {
+    pub id: Uuid,
+    pub facility_id: Uuid,
+    pub name: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct BinResponse {
+    pub id: Uuid,
+    pub warehouse_id: Uuid,
+    pub label: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct WarehouseQuery {
+    pub facility_id: Option<Uuid>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BinQuery {
+    pub warehouse_id: Option<Uuid>,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct CreateLotRequest {
     pub facility_id: Uuid,

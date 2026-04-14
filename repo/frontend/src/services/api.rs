@@ -177,6 +177,18 @@ pub async fn reject_rent_change(lodging_id: &str, change_id: &str) -> Result<Ren
 }
 
 // ── Inventory ──
+pub async fn list_warehouses(facility_id: Option<&str>) -> Result<Vec<WarehouseResponse>, String> {
+    let mut url = format!("{}/inventory/warehouses?", BASE);
+    if let Some(fid) = facility_id {
+        url.push_str(&format!("facility_id={}", fid));
+    }
+    get_json(&url).await
+}
+
+pub async fn list_bins(warehouse_id: &str) -> Result<Vec<BinResponse>, String> {
+    get_json(&format!("{}/inventory/bins?warehouse_id={}", BASE, warehouse_id)).await
+}
+
 pub async fn list_lots(facility_id: Option<&str>, near_expiry: bool) -> Result<Vec<LotResponse>, String> {
     let mut url = format!("{}/inventory/lots?near_expiry={}", BASE, near_expiry);
     if let Some(fid) = facility_id {

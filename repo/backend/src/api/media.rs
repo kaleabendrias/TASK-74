@@ -36,6 +36,18 @@ pub async fn upload(
                     ApiError::bad_request("MULTIPART_ERROR", &e.to_string())
                 })?;
                 file_data.extend_from_slice(&data);
+                // Abort the stream immediately once the limit is exceeded to
+                // prevent accumulating the full file in memory before the
+                // service-level check would fire.
+                if file_data.len() > state.config.uploads.max_size_bytes {
+                    return Err(ApiError::payload_too_large(
+                        "FILE_TOO_LARGE",
+                        &format!(
+                            "Upload exceeds the {} byte limit",
+                            state.config.uploads.max_size_bytes
+                        ),
+                    ));
+                }
             }
         }
     }

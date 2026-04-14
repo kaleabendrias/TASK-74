@@ -227,6 +227,127 @@ All endpoints are under `/api`. Authentication is required unless noted.
 
 ---
 
+## On-Prem MQ Connector
+
+The backend ships an optional message queue connector that lets on-prem systems
+push payloads into the same processing pipeline as the REST
+`POST /api/connector/inbound` endpoint.  Two transports are supported; both
+share the same HMAC-signed envelope so a single signing key covers all surfaces.
+
+### Wire Format
+
+Every message — regardless of transport — must be a JSON object:
+
+```json
+{
+  "Authorization": "sha256=<hmac-hex>",
+  "X-Nonce": "<uuid-v4>",
+  "X-Timestamp": "<unix-epoch-seconds>",
+  "body": { ... }
+}
+```
+
+| Field | Description |
+|---|---|
+| `Authorization` | `sha256=` prefix followed by the lowercase hex HMAC-SHA256 of the raw `body` bytes, signed with `auth.request_signing_key` |
+| `X-Nonce` | UUID v4; must be unique within the replay-protection window (stored in `idempotency_keys`) |
+| `X-Timestamp` | Unix epoch seconds; rejected if older than 5 minutes or in the future |
+| `body` | Arbitrary JSON payload passed to the inbound connector service |
+
+### TCP Transport (no broker required)
+
+Suitable for isolated networks where installing a broker is not feasible.
+
+**Config (`config.toml` or environment variables):**
+
+```toml
+[mq]
+enabled       = true
+bind_address  = "127.0.0.1:9999"   # loopback or internal VLAN — never a public interface
+```
+
+| Env var | Equivalent TOML key |
+|---|---|
+| `MQ_ENABLED=true` | `mq.enabled` |
+| `MQ_BIND_ADDRESS=127.0.0.1:9999` | `mq.bind_address` |
+
+**Connection:** Open a TCP connection to `<bind_address>` and send one JSON object
+per line (terminated by `\n`).  The server replies with a single JSON line:
+
+```json
+{"ok": true,  "ack": { ... }}   // success
+{"ok": false, "error": "..."}   // validation or processing failure
+```
+
+### AMQP Transport (RabbitMQ / compatible broker)
+
+Preferred when a message broker is already available. Requires a
+RabbitMQ-compatible AMQP 0-9-1 broker.
+
+**Config:**
+
+```toml
+[mq]
+enabled    = true
+amqp_url   = "amqp://user:pass@rabbitmq:5672/%2F"   # use amqps:// in production
+amqp_queue = "tourism_inbound"                       # defaults to "tourism_inbound"
+```
+
+| Env var | Equivalent TOML key |
+|---|---|
+| `MQ_ENABLED=true` | `mq.enabled` |
+| `MQ_AMQP_URL=amqp://...` | `mq.amqp_url` |
+| `MQ_AMQP_QUEUE=tourism_inbound` | `mq.amqp_queue` |
+
+When `amqp_url` is set the AMQP consumer is started instead of the TCP listener.
+The backend declares the queue as **durable** on startup (idempotent) and
+consumes one message at a time (`basic_qos prefetch=1`).
+
+* **Ack** — sent on successful validation and processing.
+* **Nack (`requeue=false`)** — sent when HMAC validation fails or processing
+  returns an error; configure a dead-letter exchange on the queue to capture
+  rejected messages for inspection.
+
+**Publishing from an on-prem system:**
+
+```python
+import pika, json, hmac, hashlib, time, uuid
+
+signing_key = b"<your_request_signing_key>"
+body = {"event": "stock_update", "item_id": "..."}
+body_bytes = json.dumps(body, separators=(",", ":")).encode()
+sig = hmac.new(signing_key, body_bytes, hashlib.sha256).hexdigest()
+
+envelope = {
+    "Authorization": f"sha256={sig}",
+    "X-Nonce": str(uuid.uuid4()),
+    "X-Timestamp": str(int(time.time())),
+    "body": body,
+}
+
+conn = pika.BlockingConnection(pika.URLParameters("amqp://user:pass@rabbitmq:5672/%2F"))
+ch = conn.channel()
+ch.queue_declare(queue="tourism_inbound", durable=True)
+ch.basic_publish(exchange="", routing_key="tourism_inbound",
+                 body=json.dumps(envelope),
+                 properties=pika.BasicProperties(delivery_mode=2))
+conn.close()
+```
+
+### Security Notes
+
+* **TCP transport:** bind only to `127.0.0.1` or a trusted internal VLAN address.
+  Exposing the port on a public interface without a firewall rule is a security risk.
+* **AMQP transport:** use `amqps://` (TLS) in production to encrypt messages in
+  transit. Configure the broker to require authentication.
+* **Signing key:** `auth.request_signing_key` must be at least 32 bytes of random
+  entropy. Rotate it like any other credential. Do **not** use the default
+  development value (`changeme`) in production.
+* **Replay protection:** the nonce table (`idempotency_keys`) deduplicates
+  messages. Identical nonces within the 5-minute timestamp window are rejected.
+
+---
+
 ## Configuration
 
 All configuration is embedded directly in `docker-compose.yml` environment blocks and `backend/config.toml`. No `.env` files are used.

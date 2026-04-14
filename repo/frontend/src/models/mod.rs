@@ -96,6 +96,8 @@ pub struct CreateResourceRequest {
     pub longitude: Option<f64>,
     pub media_refs: Vec<String>,
     pub scheduled_publish_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tz_offset_minutes: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -122,6 +124,8 @@ pub struct UpdateResourceRequest {
     pub state: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scheduled_publish_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tz_offset_minutes: Option<i32>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -217,6 +221,20 @@ pub struct RentChangeResponse {
 }
 
 // Inventory
+#[derive(Debug, Clone, Deserialize)]
+pub struct WarehouseResponse {
+    pub id: String,
+    pub facility_id: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct BinResponse {
+    pub id: String,
+    pub warehouse_id: String,
+    pub label: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LotResponse {
     pub id: String,

@@ -42,6 +42,7 @@ bigdecimal = { version = "0.4", features = ["serde"] }
 calamine = "=0.24.0"
 infer = "=0.16.0"
 futures-util = "0.3"
+lapin = "2"
 prometheus = "0.13"
 sanitize-filename = "0.5"
 time = "=0.3.36"

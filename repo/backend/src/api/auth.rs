@@ -10,19 +10,34 @@ use crate::service::auth as auth_service;
 use crate::AppState;
 
 /// Authenticates a user and returns a session cookie with a CSRF token.
+/// When MFA is required but no TOTP code was supplied, returns HTTP 200 with
+/// `{"mfa_required": true, "csrf_token": ""}` so the frontend can show the
+/// TOTP field without resorting to fragile error-message string matching.
 pub async fn login(
     state: web::Data<AppState>,
     body: web::Json<LoginRequest>,
 ) -> Result<HttpResponse, ApiError> {
     let mut conn = state.db_pool.get()?;
 
-    let result = auth_service::login(
+    let result = match auth_service::login(
         &mut conn,
         &state.config,
         &body.username,
         &body.password,
         body.totp_code.as_deref(),
-    )?;
+    ) {
+        Ok(session) => session,
+        Err(ref e) if e.body.code == "MFA_REQUIRED" => {
+            // Return a deterministic 200 challenge payload so the frontend
+            // can branch on the structured field rather than parsing the
+            // error message string.
+            return Ok(HttpResponse::Ok().json(LoginResponse {
+                csrf_token: String::new(),
+                mfa_required: Some(true),
+            }));
+        }
+        Err(e) => return Err(e),
+    };
 
     // Only set Secure flag if TLS is active (cert_path != /dev/null)
     let tls_active = state.config.tls.cert_path != "/dev/null";

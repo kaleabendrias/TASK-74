@@ -9,6 +9,41 @@ use crate::require_role;
 use crate::service::inventory as svc;
 use crate::AppState;
 
+/// Lists warehouses, scoped to the requesting user's facility for non-Admins.
+pub async fn list_warehouses(
+    state: web::Data<AppState>,
+    ctx: RbacContext,
+    query: web::Query<WarehouseQuery>,
+) -> Result<HttpResponse, ApiError> {
+    require_role!(ctx, Administrator, InventoryClerk, Clinician);
+
+    let facility_id = ctx.scope_facility().or(query.facility_id);
+    let mut conn = state.db_pool.get()?;
+    let rows = repo::list_warehouses(&mut conn, facility_id)?;
+    let resp: Vec<WarehouseResponse> = rows
+        .into_iter()
+        .map(|r| WarehouseResponse { id: r.id, facility_id: r.facility_id, name: r.name })
+        .collect();
+    Ok(HttpResponse::Ok().json(resp))
+}
+
+/// Lists bins for a given warehouse.
+pub async fn list_bins(
+    state: web::Data<AppState>,
+    ctx: RbacContext,
+    query: web::Query<BinQuery>,
+) -> Result<HttpResponse, ApiError> {
+    require_role!(ctx, Administrator, InventoryClerk, Clinician);
+
+    let mut conn = state.db_pool.get()?;
+    let rows = repo::list_bins(&mut conn, query.warehouse_id)?;
+    let resp: Vec<BinResponse> = rows
+        .into_iter()
+        .map(|r| BinResponse { id: r.id, warehouse_id: r.warehouse_id, label: r.label })
+        .collect();
+    Ok(HttpResponse::Ok().json(resp))
+}
+
 /// Verifies that a facility-scoped user is accessing an entity that belongs
 /// to their facility. Administrators (scope_facility() == None) pass through.
 fn enforce_facility(ctx: &RbacContext, entity_facility_id: Uuid) -> Result<(), ApiError> {

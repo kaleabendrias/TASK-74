@@ -94,6 +94,18 @@ impl ApiError {
         }
     }
 
+    /// Creates a 413 Payload Too Large error.
+    pub fn payload_too_large(code: &str, message: &str) -> Self {
+        Self {
+            status: StatusCode::PAYLOAD_TOO_LARGE,
+            body: ApiErrorBody {
+                code: code.to_string(),
+                message: message.to_string(),
+                details: vec![],
+            },
+        }
+    }
+
     /// Creates a 422 Unprocessable Entity error with per-field validation details.
     pub fn unprocessable_fields(code: &str, message: &str, details: Vec<FieldError>) -> Self {
         Self {

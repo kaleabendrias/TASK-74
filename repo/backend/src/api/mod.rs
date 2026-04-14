@@ -50,6 +50,8 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
                 web::post().to(lodgings::reject_rent_change),
             )
             // Inventory
+            .route("/inventory/warehouses", web::get().to(inventory::list_warehouses))
+            .route("/inventory/bins", web::get().to(inventory::list_bins))
             .route("/inventory/lots", web::post().to(inventory::create_lot))
             .route("/inventory/lots", web::get().to(inventory::list_lots))
             .route("/inventory/lots/{id}", web::get().to(inventory::get_lot))

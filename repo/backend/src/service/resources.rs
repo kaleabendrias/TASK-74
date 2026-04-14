@@ -217,7 +217,7 @@ pub fn update_resource(
     }
 
     let scheduled = match req.scheduled_publish_at {
-        Some(ref s) => Some(Some(parse_scheduled_publish(&Some(s.clone()), None)?.unwrap())),
+        Some(ref s) => Some(Some(parse_scheduled_publish(&Some(s.clone()), req.tz_offset_minutes)?.unwrap())),
         None => None,
     };
 

@@ -440,6 +440,15 @@ pub fn resource_form_page(props: &ResourceFormProps) -> Html {
                     Some(sched_v)
                 };
 
+                // Capture the browser's local UTC offset so the backend can correctly
+                // interpret the naive datetime entered in the scheduler field.
+                // JS getTimezoneOffset() returns minutes WEST of UTC (opposite sign),
+                // so we negate: UTC+5 → JS returns -300 → we send +300.
+                let tz_offset = sched_opt.as_ref().map(|_| {
+                    let js_offset = js_sys::Date::new_0().get_timezone_offset() as i32;
+                    -js_offset
+                });
+
                 let media_ids: Vec<String> = (*media_previews_c).iter().map(|(_, _, id)| id.clone()).collect();
 
                 let result = if let Some(rid) = props_id {
@@ -455,6 +464,7 @@ pub fn resource_form_page(props: &ResourceFormProps) -> Html {
                         media_refs: Some(media_ids.clone()),
                         state: None,
                         scheduled_publish_at: sched_opt,
+                        tz_offset_minutes: tz_offset,
                     };
                     api::update_resource(&rid, &req).await
                 } else {
@@ -469,6 +479,7 @@ pub fn resource_form_page(props: &ResourceFormProps) -> Html {
                         longitude: lng_f,
                         media_refs: media_ids.clone(),
                         scheduled_publish_at: sched_opt,
+                        tz_offset_minutes: tz_offset,
                     };
                     api::create_resource(&req).await
                 };

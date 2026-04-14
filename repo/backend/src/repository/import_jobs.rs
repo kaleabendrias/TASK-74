@@ -119,6 +119,22 @@ pub fn mark_job_failed(
         .execute(conn)
 }
 
+/// Persists the name of the staging table and the current row cursor so that
+/// a retry can resume from the last committed chunk rather than reprocessing
+/// the entire workbook from the beginning.
+pub fn update_staging_table_name(
+    conn: &mut PgConnection,
+    id: Uuid,
+    table_name: &str,
+) -> QueryResult<usize> {
+    diesel::update(import_jobs::table.find(id))
+        .set((
+            import_jobs::staging_table_name.eq(Some(table_name)),
+            import_jobs::updated_at.eq(Utc::now()),
+        ))
+        .execute(conn)
+}
+
 /// Re-queues a failed job if it has not exceeded its maximum retry count.
 pub fn requeue_failed_job(conn: &mut PgConnection, id: Uuid) -> QueryResult<usize> {
     diesel::update(

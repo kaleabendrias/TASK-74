@@ -31,6 +31,10 @@ pub fn inventory_page() -> Html {
     let new_item_name = use_state(String::new);
     let new_lot_number = use_state(String::new);
     let new_qty = use_state(|| "0".to_string());
+    let warehouses = use_state(|| Vec::<WarehouseResponse>::new());
+    let bins = use_state(|| Vec::<BinResponse>::new());
+    let selected_warehouse = use_state(String::new);
+    let selected_bin = use_state(String::new);
 
     // Transaction modal state
     let show_txn_modal = use_state(|| false);
@@ -54,6 +58,44 @@ pub fn inventory_page() -> Html {
                 }
                 loading.set(false);
             });
+            || {}
+        });
+    }
+
+    // Load warehouses for the current facility on mount
+    {
+        let warehouses = warehouses.clone();
+        let selected_warehouse = selected_warehouse.clone();
+        let facility = auth.user.as_ref().and_then(|u| u.facility_id.clone());
+        use_effect_with((), move |_| {
+            spawn_local(async move {
+                if let Ok(whs) = api::list_warehouses(facility.as_deref()).await {
+                    if let Some(first) = whs.first() {
+                        selected_warehouse.set(first.id.clone());
+                    }
+                    warehouses.set(whs);
+                }
+            });
+            || {}
+        });
+    }
+
+    // Load bins whenever the selected warehouse changes
+    {
+        let bins = bins.clone();
+        let selected_bin = selected_bin.clone();
+        let wid = (*selected_warehouse).clone();
+        use_effect_with(wid.clone(), move |_| {
+            if !wid.is_empty() {
+                spawn_local(async move {
+                    if let Ok(bs) = api::list_bins(&wid).await {
+                        if let Some(first) = bs.first() {
+                            selected_bin.set(first.id.clone());
+                        }
+                        bins.set(bs);
+                    }
+                });
+            }
             || {}
         });
     }
@@ -112,6 +154,8 @@ pub fn inventory_page() -> Html {
         let toasts = toasts.clone();
         let show_create_lot = show_create_lot.clone();
         let facility = auth.user.as_ref().and_then(|u| u.facility_id.clone());
+        let selected_warehouse = selected_warehouse.clone();
+        let selected_bin = selected_bin.clone();
         Callback::from(move |_: MouseEvent| {
             let name = (*new_item_name).clone();
             let lot_num = (*new_lot_number).clone();
@@ -119,12 +163,21 @@ pub fn inventory_page() -> Html {
             let lots = lots.clone();
             let toasts = toasts.clone();
             let show = show_create_lot.clone();
-            let fid = facility.clone().unwrap_or_else(|| "00000000-0000-0000-0000-000000000001".to_string());
+            let fid = facility.clone().unwrap_or_default();
+            let wid = (*selected_warehouse).clone();
+            let bid = (*selected_bin).clone();
+
+            if fid.is_empty() || wid.is_empty() || bid.is_empty() {
+                toasts.dispatch(ToastAction::Add(ToastKind::Error,
+                    "A warehouse and bin must be selected before creating a lot.".into()));
+                return;
+            }
+
             spawn_local(async move {
                 let req = CreateLotRequest {
                     facility_id: fid,
-                    warehouse_id: "00000000-0000-0000-0000-000000000002".to_string(),
-                    bin_id: "00000000-0000-0000-0000-000000000003".to_string(),
+                    warehouse_id: wid,
+                    bin_id: bid,
                     item_name: name,
                     lot_number: lot_num,
                     quantity_on_hand: qty_s.parse().unwrap_or(0),
@@ -315,12 +368,36 @@ pub fn inventory_page() -> Html {
                     setter.set(input.value());
                 })
             };
+            let on_select = |setter: UseStateHandle<String>| {
+                Callback::from(move |e: Event| {
+                    let input: web_sys::HtmlInputElement = e.target_unchecked_into();
+                    setter.set(input.value());
+                })
+            };
             html! {
                 <div class="modal-overlay">
                     <div class="modal">
                         <div class="modal-header">
                             <h2>{ "Create Inventory Lot" }</h2>
                             <button class="modal-close" onclick={Callback::from({let s = show_create_lot.clone(); move |_: MouseEvent| s.set(false)})}>{ "\u{2715}" }</button>
+                        </div>
+                        <div class="form-group">
+                            <label>{ "Warehouse" }</label>
+                            <select id="new-lot-warehouse" onchange={on_select(selected_warehouse.clone())}>
+                                { for warehouses.iter().map(|w| {
+                                    let selected = w.id == *selected_warehouse;
+                                    html! { <option value={w.id.clone()} selected={selected}>{ &w.name }</option> }
+                                })}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>{ "Bin" }</label>
+                            <select id="new-lot-bin" onchange={on_select(selected_bin.clone())}>
+                                { for bins.iter().map(|b| {
+                                    let selected = b.id == *selected_bin;
+                                    html! { <option value={b.id.clone()} selected={selected}>{ &b.label }</option> }
+                                })}
+                            </select>
                         </div>
                         <div class="form-group">
                             <label>{ "Item Name" }</label>

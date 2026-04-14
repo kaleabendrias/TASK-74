@@ -2,7 +2,45 @@ use chrono::{DateTime, NaiveDate, Utc};
 use diesel::prelude::*;
 use uuid::Uuid;
 
-use crate::schema::{inventory_lots, inventory_transactions};
+use crate::schema::{bins, inventory_lots, inventory_transactions, warehouses};
+
+// ── Warehouses ──
+
+#[derive(Queryable, Selectable, Debug, Clone)]
+#[diesel(table_name = warehouses)]
+pub struct WarehouseRow {
+    pub id: Uuid,
+    pub facility_id: Uuid,
+    pub name: String,
+}
+
+/// Lists warehouses, optionally filtered by facility.
+pub fn list_warehouses(conn: &mut PgConnection, facility_id: Option<Uuid>) -> QueryResult<Vec<WarehouseRow>> {
+    let mut query = warehouses::table.into_boxed();
+    if let Some(fid) = facility_id {
+        query = query.filter(warehouses::facility_id.eq(fid));
+    }
+    query.order(warehouses::name.asc()).select(WarehouseRow::as_select()).load(conn)
+}
+
+// ── Bins ──
+
+#[derive(Queryable, Selectable, Debug, Clone)]
+#[diesel(table_name = bins)]
+pub struct BinRow {
+    pub id: Uuid,
+    pub warehouse_id: Uuid,
+    pub label: String,
+}
+
+/// Lists bins, optionally filtered by warehouse.
+pub fn list_bins(conn: &mut PgConnection, warehouse_id: Option<Uuid>) -> QueryResult<Vec<BinRow>> {
+    let mut query = bins::table.into_boxed();
+    if let Some(wid) = warehouse_id {
+        query = query.filter(bins::warehouse_id.eq(wid));
+    }
+    query.order(bins::label.asc()).select(BinRow::as_select()).load(conn)
+}
 
 // ── Lots ──
 

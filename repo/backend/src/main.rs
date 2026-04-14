@@ -4,7 +4,7 @@ use std::time::Instant;
 use tracing_actix_web::TracingLogger;
 use tracing_subscriber::EnvFilter;
 
-use tourism_backend::{api, build_pool, config, jobs, run_migrations, seed_defaults, validate_secrets, AppState};
+use tourism_backend::{api, build_pool, config, jobs, run_migrations, seed_defaults, service, validate_secrets, AppState};
 
 fn load_rustls_config(cfg: &config::TlsConfig) -> Option<rustls::ServerConfig> {
     let cert_path = &cfg.cert_path;
@@ -73,6 +73,23 @@ async fn main() -> std::io::Result<()> {
     seed_defaults(&pool);
     jobs::spawn_job_runner(pool.clone());
     jobs::spawn_scheduled_publisher(pool.clone());
+
+    // Optionally start the on-prem MQ connector (AMQP or TCP transport)
+    if cfg.mq.enabled {
+        let mq_connector = Arc::new(service::mq_connector::HmacMqConnector::new(
+            pool.clone(),
+            cfg.auth.request_signing_key.clone(),
+        ));
+        if let Some(ref amqp_url) = cfg.mq.amqp_url {
+            service::mq_connector::spawn_amqp_consumer(
+                amqp_url.clone(),
+                cfg.mq.amqp_queue.clone(),
+                mq_connector,
+            );
+        } else {
+            service::mq_connector::spawn_mq_listener(cfg.mq.bind_address.clone(), mq_connector);
+        }
+    }
 
     let bind_addr = format!("{}:{}", cfg.server.bind_address, cfg.server.bind_port);
     let tls_config = load_rustls_config(&cfg.tls);
