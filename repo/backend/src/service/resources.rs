@@ -294,14 +294,17 @@ fn parse_scheduled_publish(
 ) -> Result<Option<chrono::DateTime<Utc>>, ApiError> {
     match input {
         None => Ok(None),
+        Some(s) if s.is_empty() => Ok(None),
         Some(s) => {
-            // Try parsing as NaiveDateTime then assume UTC
             let ndt = chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S")
+                .or_else(|_| chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M"))
                 .or_else(|_| chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S"))
+                .or_else(|_| chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M"))
+                .or_else(|_| chrono::NaiveDateTime::parse_from_str(s, "%m/%d/%Y %I:%M %p"))
                 .map_err(|_| {
                     ApiError::unprocessable(
                         "INVALID_DATETIME",
-                        "scheduled_publish_at must be in format YYYY-MM-DDTHH:MM:SS",
+                        "scheduled_publish_at must be a valid datetime (YYYY-MM-DDTHH:MM:SS, MM/DD/YYYY h:mm AM/PM, etc.)",
                     )
                 })?;
             Ok(Some(ndt.and_utc()))

@@ -144,6 +144,17 @@ pub async fn request_rent_change(
     Ok(HttpResponse::Created().json(change))
 }
 
+/// Lists all pending rent change requests for reviewer action.
+pub async fn list_pending_rent_changes(
+    state: web::Data<AppState>,
+    ctx: RbacContext,
+) -> Result<HttpResponse, ApiError> {
+    require_role!(ctx, Administrator, Reviewer);
+    let mut conn = state.db_pool.get()?;
+    let rows = svc::list_pending_rent_changes(&mut conn)?;
+    Ok(HttpResponse::Ok().json(rows))
+}
+
 #[derive(serde::Deserialize)]
 pub struct RentChangePath {
     id: Uuid,

@@ -1,6 +1,7 @@
 //! Resource library pages: paginated list with search/filter, create/edit form with validation,
 //! version history panel, and state transition buttons.
 
+use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::spawn_local;
 use web_sys::HtmlInputElement;
 use yew::prelude::*;
@@ -216,7 +217,9 @@ pub fn resource_form_page(props: &ResourceFormProps) -> Html {
     let scheduled = use_state(String::new);
     let state = use_state(|| "draft".to_string());
     let current_version = use_state(|| 1i32);
-    let media_previews = use_state(|| Vec::<(String, String)>::new()); // (url, name)
+    let media_previews = use_state(|| Vec::<(String, String, String)>::new()); // (preview_url, filename, media_id)
+    let media_drag = use_state(|| false);
+    let media_error = use_state(|| Option::<String>::None);
     let error = use_state(|| Option::<String>::None);
     let loading = use_state(|| false);
 
@@ -291,6 +294,101 @@ pub fn resource_form_page(props: &ResourceFormProps) -> Html {
         })
     };
 
+    // Media file validation + upload
+    let validate_media_file = |file: &web_sys::File| -> Result<(), String> {
+        let name = file.name().to_lowercase();
+        let valid_ext = name.ends_with(".jpg") || name.ends_with(".jpeg")
+            || name.ends_with(".png") || name.ends_with(".mp4");
+        if !valid_ext {
+            return Err("Only JPG, PNG, and MP4 files are allowed".into());
+        }
+        if file.size() > 52_428_800.0 {
+            return Err("File exceeds 50 MB limit".into());
+        }
+        Ok(())
+    };
+
+    let upload_media_file = {
+        let media_previews = media_previews.clone();
+        let media_error = media_error.clone();
+        let toasts = toasts.clone();
+        move |file: web_sys::File| {
+            let media_previews = media_previews.clone();
+            let media_error = media_error.clone();
+            let toasts = toasts.clone();
+            let name = file.name();
+            let preview_url = web_sys::Url::create_object_url_with_blob(&file).unwrap_or_default();
+            spawn_local(async move {
+                match crate::services::api::upload_media(file).await {
+                    Ok(resp) => {
+                        let mut items = (*media_previews).clone();
+                        items.push((preview_url, name, resp.id.to_string()));
+                        media_previews.set(items);
+                        media_error.set(None);
+                    }
+                    Err(e) => {
+                        media_error.set(Some(e.clone()));
+                        toasts.dispatch(crate::context::ToastAction::Add(
+                            crate::models::ToastKind::Error, e));
+                    }
+                }
+            });
+        }
+    };
+
+    let on_media_select = {
+        let upload = upload_media_file.clone();
+        let media_error = media_error.clone();
+        Callback::from(move |e: Event| {
+            let input: web_sys::HtmlInputElement = e.target_unchecked_into();
+            if let Some(files) = input.files() {
+                for i in 0..files.length() {
+                    if let Some(file) = files.get(i) {
+                        match validate_media_file(&file) {
+                            Ok(()) => upload(file),
+                            Err(msg) => media_error.set(Some(msg)),
+                        }
+                    }
+                }
+            }
+        })
+    };
+
+    let on_media_drop = {
+        let upload = upload_media_file.clone();
+        let media_error = media_error.clone();
+        let media_drag = media_drag.clone();
+        Callback::from(move |e: DragEvent| {
+            e.prevent_default();
+            media_drag.set(false);
+            if let Some(dt) = e.data_transfer() {
+                if let Some(files) = dt.files() {
+                    for i in 0..files.length() {
+                        if let Some(file) = files.get(i) {
+                            match validate_media_file(&file) {
+                                Ok(()) => upload(file),
+                                Err(msg) => media_error.set(Some(msg)),
+                            }
+                        }
+                    }
+                }
+            }
+        })
+    };
+
+    let remove_media = {
+        let media_previews = media_previews.clone();
+        Callback::from(move |idx: usize| {
+            let mut items = (*media_previews).clone();
+            // Revoke the preview URL
+            if let Some((url, _, _)) = items.get(idx) {
+                web_sys::Url::revoke_object_url(url).ok();
+            }
+            items.remove(idx);
+            media_previews.set(items);
+        })
+    };
+
     // Submit
     let on_submit = {
         let props_id = props.id.clone();
@@ -308,6 +406,7 @@ pub fn resource_form_page(props: &ResourceFormProps) -> Html {
         let loading = loading.clone();
         let toasts = toasts.clone();
         let nav = nav.clone();
+        let media_previews_c = media_previews.clone();
         Callback::from(move |e: SubmitEvent| {
             e.prevent_default();
             let props_id = props_id.clone();
@@ -324,6 +423,7 @@ pub fn resource_form_page(props: &ResourceFormProps) -> Html {
             let loading = loading.clone();
             let toasts = toasts.clone();
             let nav = nav.clone();
+            let media_previews_c = media_previews_c.clone();
 
             loading.set(true);
             error.set(None);
@@ -340,6 +440,8 @@ pub fn resource_form_page(props: &ResourceFormProps) -> Html {
                     Some(sched_v)
                 };
 
+                let media_ids: Vec<String> = (*media_previews_c).iter().map(|(_, _, id)| id.clone()).collect();
+
                 let result = if let Some(rid) = props_id {
                     let req = UpdateResourceRequest {
                         title: Some(title_v),
@@ -350,7 +452,7 @@ pub fn resource_form_page(props: &ResourceFormProps) -> Html {
                         address: Some(address_v),
                         latitude: lat_f,
                         longitude: lng_f,
-                        media_refs: None,
+                        media_refs: Some(media_ids.clone()),
                         state: None,
                         scheduled_publish_at: sched_opt,
                     };
@@ -365,7 +467,7 @@ pub fn resource_form_page(props: &ResourceFormProps) -> Html {
                         address: address_v,
                         latitude: lat_f,
                         longitude: lng_f,
-                        media_refs: vec![],
+                        media_refs: media_ids.clone(),
                         scheduled_publish_at: sched_opt,
                     };
                     api::create_resource(&req).await
@@ -570,9 +672,64 @@ pub fn resource_form_page(props: &ResourceFormProps) -> Html {
 
             <div class="card">
                 <div class="card-header"><h2>{ "Media Attachments" }</h2></div>
-                <div class="upload-area" id="res-media-upload">
-                    <p>{ "Drag & drop or click to upload images (JPG, PNG) or video (MP4) — max 50 MB" }</p>
+                <div class={if *media_drag { "upload-area dragover" } else { "upload-area" }}
+                    id="res-media-upload"
+                    ondragover={{
+                        let d = media_drag.clone();
+                        Callback::from(move |e: DragEvent| { e.prevent_default(); d.set(true); })
+                    }}
+                    ondragleave={{
+                        let d = media_drag.clone();
+                        Callback::from(move |_: DragEvent| d.set(false))
+                    }}
+                    ondrop={on_media_drop.clone()}
+                    onclick={{
+                        Callback::from(move |_: MouseEvent| {
+                            if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
+                                if let Some(el) = doc.get_element_by_id("res-media-file-input") {
+                                    let input: web_sys::HtmlInputElement = el.unchecked_into();
+                                    input.click();
+                                }
+                            }
+                        })
+                    }}
+                >
+                    <p><strong>{ "Drop files here or click to browse" }</strong></p>
+                    <p>{ "JPG, PNG, MP4 — max 50 MB per file" }</p>
                 </div>
+                <input id="res-media-file-input" type="file" accept=".jpg,.jpeg,.png,.mp4"
+                    multiple=true
+                    style="display:none"
+                    onchange={on_media_select.clone()} />
+                { if !media_previews.is_empty() {
+                    html! {
+                        <div class="upload-preview mt-4">
+                            { for media_previews.iter().enumerate().map(|(i, (url, name, _id))| {
+                                let remove = remove_media.clone();
+                                let is_video = name.ends_with(".mp4");
+                                html! {
+                                    <div class="upload-preview-item" key={name.clone()}>
+                                        { if is_video {
+                                            html! { <video src={url.clone()} /> }
+                                        } else {
+                                            html! { <img src={url.clone()} alt={name.clone()} /> }
+                                        }}
+                                        <button type="button" class="remove-btn"
+                                            onclick={Callback::from(move |_: MouseEvent| remove.emit(i))}>
+                                            { "\u{2715}" }
+                                        </button>
+                                        <div class="text-sm text-center" style="padding:2px;font-size:0.65rem;overflow:hidden;">
+                                            { name }
+                                        </div>
+                                    </div>
+                                }
+                            })}
+                        </div>
+                    }
+                } else { html!{} }}
+                { if let Some(ref e) = *media_error {
+                    html! { <div class="field-error mt-2">{ e }</div> }
+                } else { html!{} }}
             </div>
 
             <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:16px;">

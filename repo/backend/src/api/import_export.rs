@@ -149,7 +149,7 @@ pub async fn download_export(
             let q = format!("SELECT row_to_json(r) as doc FROM resources r {} ORDER BY created_at DESC LIMIT 1000", facility_clause);
             let rows: Vec<serde_json::Value> = diesel::sql_query(q)
             .load::<crate::repository::JsonRow>(&mut conn)
-            .unwrap_or_default()
+            .map_err(|e| ApiError::internal(&format!("Export query failed: {}", e)))?
             .into_iter().map(|r| r.doc).collect();
             serde_json::json!(rows)
         }
@@ -157,7 +157,7 @@ pub async fn download_export(
             let q = format!("SELECT row_to_json(l) as doc FROM lodgings l {} ORDER BY created_at DESC LIMIT 1000", facility_clause);
             let rows: Vec<serde_json::Value> = diesel::sql_query(q)
             .load::<crate::repository::JsonRow>(&mut conn)
-            .unwrap_or_default()
+            .map_err(|e| ApiError::internal(&format!("Export query failed: {}", e)))?
             .into_iter().map(|r| r.doc).collect();
             serde_json::json!(rows)
         }
@@ -165,7 +165,7 @@ pub async fn download_export(
             let q = format!("SELECT row_to_json(i) as doc FROM inventory_lots i {} ORDER BY created_at DESC LIMIT 1000", facility_clause);
             let rows: Vec<serde_json::Value> = diesel::sql_query(q)
             .load::<crate::repository::JsonRow>(&mut conn)
-            .unwrap_or_default()
+            .map_err(|e| ApiError::internal(&format!("Export query failed: {}", e)))?
             .into_iter().map(|r| r.doc).collect();
             serde_json::json!(rows)
         }
@@ -173,7 +173,7 @@ pub async fn download_export(
             let q = format!("SELECT row_to_json(t) as doc FROM inventory_transactions t {} ORDER BY created_at DESC LIMIT 1000", facility_clause);
             let rows: Vec<serde_json::Value> = diesel::sql_query(q)
             .load::<crate::repository::JsonRow>(&mut conn)
-            .unwrap_or_default()
+            .map_err(|e| ApiError::internal(&format!("Export query failed: {}", e)))?
             .into_iter().map(|r| r.doc).collect();
             serde_json::json!(rows)
         }
@@ -196,6 +196,17 @@ pub async fn download_export(
             format!("attachment; filename=\"export_{}.json\"", approval.id),
         ))
         .json(export_data))
+}
+
+/// Lists all pending export approvals for reviewers.
+pub async fn list_pending_exports(
+    state: web::Data<AppState>,
+    ctx: RbacContext,
+) -> Result<HttpResponse, ApiError> {
+    require_role!(ctx, Administrator, Reviewer);
+    let mut conn = state.db_pool.get()?;
+    let rows = svc::list_pending_exports(&mut conn)?;
+    Ok(HttpResponse::Ok().json(rows))
 }
 
 /// Masks PII fields in export data rows.

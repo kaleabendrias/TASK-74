@@ -174,6 +174,15 @@ pub struct NewRentChange {
     pub requested_by: Uuid,
 }
 
+/// Lists all rent change requests with status = 'pending'.
+pub fn list_pending_rent_changes(conn: &mut PgConnection) -> QueryResult<Vec<RentChangeRow>> {
+    lodging_rent_changes::table
+        .filter(lodging_rent_changes::status.eq("pending"))
+        .order(lodging_rent_changes::created_at.desc())
+        .select(RentChangeRow::as_select())
+        .load(conn)
+}
+
 /// Inserts a new rent change request for a lodging.
 pub fn insert_rent_change(
     conn: &mut PgConnection,

@@ -280,6 +280,14 @@ pub fn reject_rent_change(
     Ok(rent_change_to_response(&updated))
 }
 
+/// Lists all pending rent change requests.
+pub fn list_pending_rent_changes(
+    conn: &mut PgConnection,
+) -> Result<Vec<RentChangeResponse>, ApiError> {
+    let rows = repo::list_pending_rent_changes(conn)?;
+    Ok(rows.iter().map(rent_change_to_response).collect())
+}
+
 // ── Helpers ──
 
 fn validate_lodging_state(current: &str, new: &str, role: UserRole) -> Result<(), ApiError> {

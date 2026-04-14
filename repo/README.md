@@ -67,7 +67,7 @@ Run the full test suite (unit + API integration tests with coverage reporting):
 ```
 
 The script:
-1. Builds and starts test containers via `docker-compose.test.yml`
+1. Builds and starts test containers using the `test` profile in `docker-compose.yml`
 2. Waits for the PostgreSQL test database to become healthy
 3. Runs **145 unit tests** covering all business logic and cryptographic functions
 4. Runs **50 API integration tests** against a real database and running backend

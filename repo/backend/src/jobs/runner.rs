@@ -72,6 +72,9 @@ fn process_xlsx_job(
         .map(|c| c.to_string().trim().to_lowercase())
         .collect();
     let total_rows = (rows.len() - 1) as i32;
+    if total_rows > 10_000 {
+        return Err(format!("Import exceeds maximum of 10,000 rows ({} rows found)", total_rows).into());
+    }
     import_jobs::update_job_progress(conn, job.id, 0, total_rows, 0)?;
 
     // Phase 1: Parse and validate ALL rows — fail fast on any error
@@ -199,7 +202,7 @@ fn publish_scheduled(pool: &DbPool) -> Result<(), Box<dyn std::error::Error>> {
         "UPDATE resources SET state = 'published', updated_at = now() \
          WHERE scheduled_publish_at <= $1 \
          AND scheduled_publish_at IS NOT NULL \
-         AND state IN ('draft', 'in_review')"
+         AND state = 'in_review'"
     )
     .bind::<diesel::sql_types::Timestamptz, _>(now)
     .execute(&mut conn)?;

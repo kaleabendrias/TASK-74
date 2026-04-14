@@ -90,6 +90,7 @@ pub fn import_export_page() -> Html {
 
     let on_drop = {
         let import_file = import_file.clone();
+        let import_file_obj = import_file_obj.clone();
         let import_error = import_error.clone();
         let drag_over = drag_over.clone();
         Callback::from(move |e: DragEvent| {
@@ -101,9 +102,12 @@ pub fn import_export_page() -> Html {
                         let name = file.name();
                         if !name.ends_with(".xlsx") {
                             import_error.set(Some("Only .xlsx files are accepted".into()));
+                            import_file.set(None);
+                            import_file_obj.set(None);
                         } else {
                             import_error.set(None);
                             import_file.set(Some(name));
+                            import_file_obj.set(Some(file));
                         }
                     }
                 }

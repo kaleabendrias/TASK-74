@@ -33,8 +33,8 @@ services:
       DATABASE_URL: "postgres://tourism:tourism_secret_2024@db:5432/tourism_portal"
 
       # ── TLS ──
-      TLS_CERT_PATH: "/app/certs/server.crt"
-      TLS_KEY_PATH: "/app/certs/server.key"
+      TLS_CERT_PATH: "/dev/null"
+      TLS_KEY_PATH: "/dev/null"
 
       # ── HMAC / Signing ──
       HMAC_SECRET: "h4ck-pr00f-hmac-secret-change-in-production-2024"
@@ -56,8 +56,8 @@ services:
       CSRF_TOKEN_TTL_SECS: "3600"
 
       # ── Upload limits ──
-      UPLOAD_MAX_SIZE_BYTES: "10485760"
-      UPLOAD_ALLOWED_MIMES: "image/jpeg,image/png,image/webp,application/pdf"
+      UPLOAD_MAX_SIZE_BYTES: "52428800"
+      UPLOAD_ALLOWED_MIMES: "image/jpeg,image/png,video/mp4"
 
       # ── Feature switches ──
       FEATURE_MFA_ENABLED: "true"
@@ -106,7 +106,7 @@ services:
         condition: service_started
     environment:
       DATABASE_URL: "postgres://tourism:tourism_secret_2024@db:5432/tourism_portal"
-      TEST_BASE_URL: "https://backend:8080"
+      TEST_BASE_URL: "http://backend:8080"
       RUST_LOG: "info"
     volumes:
       - coverage-data:/coverage

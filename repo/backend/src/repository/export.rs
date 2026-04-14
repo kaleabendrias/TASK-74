@@ -43,6 +43,15 @@ pub fn find_approval(conn: &mut PgConnection, id: Uuid) -> QueryResult<ExportApp
         .first(conn)
 }
 
+/// Lists all export approvals with status = 'pending'.
+pub fn list_pending(conn: &mut PgConnection) -> QueryResult<Vec<ExportApprovalRow>> {
+    export_approvals::table
+        .filter(export_approvals::status.eq("pending"))
+        .order(export_approvals::created_at.desc())
+        .select(ExportApprovalRow::as_select())
+        .load(conn)
+}
+
 /// Approves an export request, recording the approver and watermark text.
 pub fn approve_export(
     conn: &mut PgConnection,

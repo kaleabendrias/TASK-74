@@ -303,6 +303,14 @@ pub fn export_download_url(id: &str) -> String {
     format!("{}/export/download/{}", BASE, id)
 }
 
+pub async fn list_pending_exports() -> Result<Vec<ExportApprovalResponse>, String> {
+    get_json(&format!("{}/export/pending", BASE)).await
+}
+
+pub async fn list_pending_rent_changes() -> Result<Vec<RentChangeResponse>, String> {
+    get_json(&format!("{}/lodgings/rent-changes/pending", BASE)).await
+}
+
 // ── Config ──
 pub async fn list_config() -> Result<Vec<serde_json::Value>, String> {
     get_json(&format!("{}/config", BASE)).await

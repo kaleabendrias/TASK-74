@@ -37,6 +37,7 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
                 "/lodgings/{id}/rent-change",
                 web::put().to(lodgings::request_rent_change),
             )
+            .route("/lodgings/rent-changes/pending", web::get().to(lodgings::list_pending_rent_changes))
             .route(
                 "/lodgings/{id}/rent-change/{change_id}/approve",
                 web::post().to(lodgings::approve_rent_change),
@@ -83,6 +84,7 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
                 "/export/download/{id}",
                 web::get().to(import_export::download_export),
             )
+            .route("/export/pending", web::get().to(import_export::list_pending_exports))
             // Connector
             .route("/connector/inbound", web::post().to(connector::inbound))
             // Config

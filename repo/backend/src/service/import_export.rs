@@ -81,6 +81,14 @@ pub fn get_export_approval(
     export_repo::find_approval(conn, id).map_err(|_| ApiError::not_found("Export approval"))
 }
 
+/// Lists all pending export approval requests.
+pub fn list_pending_exports(
+    conn: &mut PgConnection,
+) -> Result<Vec<ExportApprovalResponse>, ApiError> {
+    let rows = export_repo::list_pending(conn)?;
+    Ok(rows.iter().map(approval_to_response).collect())
+}
+
 // ── Helpers ──
 
 fn job_to_response(row: &repo::ImportJobRow) -> ImportJobResponse {
