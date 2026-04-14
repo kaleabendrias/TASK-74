@@ -48,13 +48,15 @@ Log in at the frontend with any of the default users listed below. The backend a
 
 The backend seeds these users automatically on first startup:
 
-| Username | Password | Role | Facility | Access |
-|---|---|---|---|---|
-| `admin` | `admin123` | Administrator | All | Full access to every section |
-| `publisher` | `publisher123` | Publisher | All | Resources, Lodgings (create/edit/submit) |
-| `reviewer` | `reviewer123` | Reviewer | All | Resources, Lodgings (review/approve/reject) |
-| `clinician` | `clinician123` | Clinician | Main Facility | Inventory (view, scoped to facility) |
-| `clerk` | `clerk123` | InventoryClerk | Main Facility | Inventory, Import/Export (scoped to facility) |
+| Username | Role | Facility | Notes |
+|---|---|---|---|
+| `admin` | Administrator | All | Password set via `INIT_ADMIN_PASSWORD` env var (default: `changeme`) |
+| `publisher` | Publisher | All | Same initial password |
+| `reviewer` | Reviewer | All | Same initial password |
+| `clinician` | Clinician | Main Facility | Same initial password |
+| `clerk` | InventoryClerk | Main Facility | Same initial password |
+
+All accounts share the initial password defined by `INIT_ADMIN_PASSWORD`. Change passwords after first login.
 
 ---
 
@@ -85,6 +87,17 @@ Expected output:
 ```
 
 Both suites must independently achieve >= 90% coverage. The script tears down all containers regardless of pass/fail.
+
+### Coverage (Optional)
+
+To generate a coverage report with [cargo-tarpaulin](https://github.com/xd009642/tarpaulin):
+
+```bash
+docker compose --profile test run --rm test-runner bash -c \
+  'cargo tarpaulin -p unit_tests -p api_tests --out Html --output-dir /coverage -- --test-threads=1'
+```
+
+The HTML report will be in `coverage_output/tarpaulin-report.html`.
 
 ---
 

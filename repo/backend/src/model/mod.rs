@@ -103,6 +103,7 @@ pub struct CreateResourceRequest {
     pub media_refs: Vec<Uuid>,
     pub scheduled_publish_at: Option<String>,
     pub contact_info: Option<String>,
+    pub tz_offset_minutes: Option<i32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -118,6 +119,7 @@ pub struct UpdateResourceRequest {
     pub media_refs: Option<Vec<Uuid>>,
     pub state: Option<String>,
     pub scheduled_publish_at: Option<String>,
+    pub tz_offset_minutes: Option<i32>,
 }
 
 #[derive(Debug, Serialize)]
@@ -344,6 +346,7 @@ pub struct ImportJobResponse {
     pub retries: i32,
     pub failure_log: Option<String>,
     pub committed: bool,
+    pub created_by: Uuid,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

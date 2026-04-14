@@ -76,6 +76,16 @@ async fn main() -> std::io::Result<()> {
     let bind_addr = format!("{}:{}", cfg.server.bind_address, cfg.server.bind_port);
     let tls_config = load_rustls_config(&cfg.tls);
 
+    if tls_config.is_none() {
+        let is_production = std::env::var("CONFIG_PROFILE").map(|p| p == "production").unwrap_or(false);
+        if is_production {
+            panic!(
+                "FATAL: TLS certificates are required in production mode but could not be loaded from {} / {}",
+                cfg.tls.cert_path, cfg.tls.key_path
+            );
+        }
+    }
+
     let state = Arc::new(AppState {
         db_pool: pool,
         config: cfg,

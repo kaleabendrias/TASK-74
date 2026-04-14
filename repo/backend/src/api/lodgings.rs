@@ -18,7 +18,10 @@ fn enforce_lodging_facility(ctx: &RbacContext, lodging_facility_id: Option<Uuid>
             Some(fid) if fid != scoped => {
                 return Err(ApiError::forbidden("Access denied: lodging belongs to a different facility"));
             }
-            _ => {}
+            None => {
+                return Err(ApiError::forbidden("Access denied: lodging has no facility assignment"));
+            }
+            _ => {} // facility matches
         }
     }
     Ok(())

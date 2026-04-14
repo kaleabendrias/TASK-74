@@ -1,11 +1,7 @@
-use actix_web::{web, App, test as actix_test};
 use diesel::prelude::*;
-use diesel::r2d2::{self, ConnectionManager};
 use diesel::PgConnection;
-use std::sync::Arc;
-use std::time::Instant;
 
-use tourism_backend::{api, build_pool, run_migrations, AppState, DbPool};
+use tourism_backend::{build_pool, run_migrations, DbPool};
 use tourism_backend::config::*;
 use tourism_backend::crypto::argon2id;
 use tourism_backend::schema::*;
@@ -40,19 +36,6 @@ pub fn setup_pool() -> DbPool {
     let pool = build_pool(&cfg.database.url, cfg.database.max_connections);
     run_migrations(&pool);
     pool
-}
-
-pub fn create_test_app(pool: DbPool) -> (Arc<AppState>, actix_web::dev::ServiceResponse) {
-    // just return the state for now
-    unreachable!()
-}
-
-pub fn get_state(pool: DbPool) -> Arc<AppState> {
-    Arc::new(AppState {
-        db_pool: pool,
-        config: test_config(),
-        start_time: Instant::now(),
-    })
 }
 
 pub fn seed_users(pool: &DbPool) -> SeedData {

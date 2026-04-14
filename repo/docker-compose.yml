@@ -82,6 +82,8 @@ services:
       BIND_ADDRESS: "0.0.0.0"
       BIND_PORT: "8080"
 
+      INIT_ADMIN_PASSWORD: "changeme"
+
       RUST_LOG: "info,tourism_backend=debug"
     volumes:
       - uploads:/app/uploads

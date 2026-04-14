@@ -200,9 +200,9 @@ th {{ background: #eee; }}
 <p><strong>On Hand:</strong> {} | <strong>Reserved:</strong> {}</p>
 <table>
 <tr><th>Date</th><th>Direction</th><th>Qty</th><th>Reason</th><th>Performed By</th></tr>"#,
-        lot.lot_number,
-        lot.lot_number,
-        lot.item_name,
+        escape_html(&lot.lot_number),
+        escape_html(&lot.lot_number),
+        escape_html(&lot.item_name),
         lot.quantity_on_hand,
         lot.quantity_reserved
     );
@@ -211,10 +211,10 @@ th {{ background: #eee; }}
         html.push_str(&format!(
             "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>\n",
             tx.created_at.format("%Y-%m-%d %H:%M:%S"),
-            tx.direction,
+            escape_html(&tx.direction),
             tx.quantity,
-            tx.reason.as_deref().unwrap_or("—"),
-            username
+            escape_html(tx.reason.as_deref().unwrap_or("—")),
+            escape_html(username)
         ));
     }
 
@@ -228,6 +228,14 @@ th {{ background: #eee; }}
 }
 
 // ── Helpers ──
+
+fn escape_html(s: &str) -> String {
+    s.replace('&', "&amp;")
+     .replace('<', "&lt;")
+     .replace('>', "&gt;")
+     .replace('"', "&quot;")
+     .replace('\'', "&#x27;")
+}
 
 fn lot_to_response(row: &repo::LotRow) -> LotResponse {
     let near_expiry = row.expiration_date.map_or(false, |d| {

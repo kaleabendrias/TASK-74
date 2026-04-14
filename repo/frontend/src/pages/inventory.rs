@@ -26,6 +26,19 @@ pub fn inventory_page() -> Html {
     let reserve_lot_id = use_state(|| Option::<String>::None);
     let reserve_qty = use_state(|| "1".to_string());
 
+    // Create lot modal state
+    let show_create_lot = use_state(|| false);
+    let new_item_name = use_state(String::new);
+    let new_lot_number = use_state(String::new);
+    let new_qty = use_state(|| "0".to_string());
+
+    // Transaction modal state
+    let show_txn_modal = use_state(|| false);
+    let txn_lot_id = use_state(String::new);
+    let txn_direction = use_state(|| "inbound".to_string());
+    let txn_qty = use_state(|| "1".to_string());
+    let txn_reason = use_state(String::new);
+
     {
         let lots = lots.clone();
         let loading = loading.clone();
@@ -91,6 +104,78 @@ pub fn inventory_page() -> Html {
         })
     };
 
+    let on_create_lot = {
+        let new_item_name = new_item_name.clone();
+        let new_lot_number = new_lot_number.clone();
+        let new_qty = new_qty.clone();
+        let lots = lots.clone();
+        let toasts = toasts.clone();
+        let show_create_lot = show_create_lot.clone();
+        let facility = auth.user.as_ref().and_then(|u| u.facility_id.clone());
+        Callback::from(move |_: MouseEvent| {
+            let name = (*new_item_name).clone();
+            let lot_num = (*new_lot_number).clone();
+            let qty_s = (*new_qty).clone();
+            let lots = lots.clone();
+            let toasts = toasts.clone();
+            let show = show_create_lot.clone();
+            let fid = facility.clone().unwrap_or_else(|| "00000000-0000-0000-0000-000000000001".to_string());
+            spawn_local(async move {
+                let req = CreateLotRequest {
+                    facility_id: fid,
+                    warehouse_id: "00000000-0000-0000-0000-000000000002".to_string(),
+                    bin_id: "00000000-0000-0000-0000-000000000003".to_string(),
+                    item_name: name,
+                    lot_number: lot_num,
+                    quantity_on_hand: qty_s.parse().unwrap_or(0),
+                    expiration_date: None,
+                };
+                match api::create_lot(&req).await {
+                    Ok(lot) => {
+                        let mut l = (*lots).clone();
+                        l.insert(0, lot);
+                        lots.set(l);
+                        show.set(false);
+                        toasts.dispatch(ToastAction::Add(ToastKind::Success, "Lot created".into()));
+                    }
+                    Err(e) => toasts.dispatch(ToastAction::Add(ToastKind::Error, e)),
+                }
+            });
+        })
+    };
+
+    let on_create_txn = {
+        let txn_lot_id = txn_lot_id.clone();
+        let txn_direction = txn_direction.clone();
+        let txn_qty = txn_qty.clone();
+        let txn_reason = txn_reason.clone();
+        let toasts = toasts.clone();
+        let show_txn_modal = show_txn_modal.clone();
+        Callback::from(move |_: MouseEvent| {
+            let lid = (*txn_lot_id).clone();
+            let dir = (*txn_direction).clone();
+            let qty_s = (*txn_qty).clone();
+            let reason = (*txn_reason).clone();
+            let toasts = toasts.clone();
+            let show = show_txn_modal.clone();
+            spawn_local(async move {
+                let req = CreateTransactionRequest {
+                    lot_id: lid,
+                    direction: dir,
+                    quantity: qty_s.parse().unwrap_or(1),
+                    reason: if reason.is_empty() { None } else { Some(reason) },
+                };
+                match api::create_transaction(&req).await {
+                    Ok(_) => {
+                        show.set(false);
+                        toasts.dispatch(ToastAction::Add(ToastKind::Success, "Transaction recorded".into()));
+                    }
+                    Err(e) => toasts.dispatch(ToastAction::Add(ToastKind::Error, e)),
+                }
+            });
+        })
+    };
+
     // For reserve modal: compute remaining stock
     let reserve_lot = reserve_lot_id.as_ref().and_then(|id| lots.iter().find(|l| &l.id == id));
     let reserve_qty_val: i32 = reserve_qty.parse().unwrap_or(0);
@@ -105,6 +190,14 @@ pub fn inventory_page() -> Html {
                 <button id="toggle-near-expiry" class={if *show_near_expiry { "btn btn-primary btn-sm" } else { "btn btn-secondary btn-sm" }}
                     onclick={toggle_expiry}>
                     { if *show_near_expiry { "Show All" } else { "Near Expiry Only" } }
+                </button>
+                <button id="create-lot-btn" class="btn btn-primary btn-sm"
+                    onclick={Callback::from({let s = show_create_lot.clone(); move |_: MouseEvent| s.set(true)})}>
+                    { "+ New Lot" }
+                </button>
+                <button id="create-txn-btn" class="btn btn-secondary btn-sm"
+                    onclick={Callback::from({let s = show_txn_modal.clone(); move |_: MouseEvent| s.set(true)})}>
+                    { "+ Transaction" }
                 </button>
             </div>
         </div>
@@ -210,6 +303,86 @@ pub fn inventory_page() -> Html {
                                 </>
                             }
                         } else { html!{} }}
+                    </div>
+                </div>
+            }
+        } else { html!{} }}
+
+        { if *show_create_lot {
+            let on_input = |setter: UseStateHandle<String>| {
+                Callback::from(move |e: InputEvent| {
+                    let input: web_sys::HtmlInputElement = e.target_unchecked_into();
+                    setter.set(input.value());
+                })
+            };
+            html! {
+                <div class="modal-overlay">
+                    <div class="modal">
+                        <div class="modal-header">
+                            <h2>{ "Create Inventory Lot" }</h2>
+                            <button class="modal-close" onclick={Callback::from({let s = show_create_lot.clone(); move |_: MouseEvent| s.set(false)})}>{ "\u{2715}" }</button>
+                        </div>
+                        <div class="form-group">
+                            <label>{ "Item Name" }</label>
+                            <input id="new-lot-item" type="text" value={(*new_item_name).clone()} oninput={on_input(new_item_name.clone())} />
+                        </div>
+                        <div class="form-group">
+                            <label>{ "Lot Number" }</label>
+                            <input id="new-lot-number" type="text" value={(*new_lot_number).clone()} oninput={on_input(new_lot_number.clone())} />
+                        </div>
+                        <div class="form-group">
+                            <label>{ "Initial Quantity" }</label>
+                            <input id="new-lot-qty" type="number" min="0" value={(*new_qty).clone()} oninput={on_input(new_qty.clone())} />
+                        </div>
+                        <div class="modal-footer">
+                            <button class="btn btn-secondary" onclick={Callback::from({let s = show_create_lot.clone(); move |_: MouseEvent| s.set(false)})}>{ "Cancel" }</button>
+                            <button id="confirm-create-lot" class="btn btn-primary" onclick={on_create_lot}>{ "Create" }</button>
+                        </div>
+                    </div>
+                </div>
+            }
+        } else { html!{} }}
+
+        { if *show_txn_modal {
+            let on_input = |setter: UseStateHandle<String>| {
+                Callback::from(move |e: InputEvent| {
+                    let input: web_sys::HtmlInputElement = e.target_unchecked_into();
+                    setter.set(input.value());
+                })
+            };
+            html! {
+                <div class="modal-overlay">
+                    <div class="modal">
+                        <div class="modal-header">
+                            <h2>{ "Record Transaction" }</h2>
+                            <button class="modal-close" onclick={Callback::from({let s = show_txn_modal.clone(); move |_: MouseEvent| s.set(false)})}>{ "\u{2715}" }</button>
+                        </div>
+                        <div class="form-group">
+                            <label>{ "Lot ID" }</label>
+                            <input id="txn-lot-id" type="text" value={(*txn_lot_id).clone()} oninput={on_input(txn_lot_id.clone())} />
+                        </div>
+                        <div class="form-group">
+                            <label>{ "Direction" }</label>
+                            <select id="txn-direction" onchange={Callback::from({
+                                let d = txn_direction.clone();
+                                move |e: Event| { let i: web_sys::HtmlInputElement = e.target_unchecked_into(); d.set(i.value()); }
+                            })}>
+                                <option value="inbound">{ "Inbound" }</option>
+                                <option value="outbound">{ "Outbound" }</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>{ "Quantity" }</label>
+                            <input id="txn-qty" type="number" min="1" value={(*txn_qty).clone()} oninput={on_input(txn_qty.clone())} />
+                        </div>
+                        <div class="form-group">
+                            <label>{ "Reason" }</label>
+                            <input id="txn-reason" type="text" value={(*txn_reason).clone()} oninput={on_input(txn_reason.clone())} />
+                        </div>
+                        <div class="modal-footer">
+                            <button class="btn btn-secondary" onclick={Callback::from({let s = show_txn_modal.clone(); move |_: MouseEvent| s.set(false)})}>{ "Cancel" }</button>
+                            <button id="confirm-txn" class="btn btn-primary" onclick={on_create_txn}>{ "Record" }</button>
+                        </div>
                     </div>
                 </div>
             }

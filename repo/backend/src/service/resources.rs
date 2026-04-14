@@ -66,7 +66,7 @@ pub fn create_resource(
     });
 
     // Parse scheduled_publish_at
-    let scheduled = parse_scheduled_publish(&req.scheduled_publish_at)?;
+    let scheduled = parse_scheduled_publish(&req.scheduled_publish_at, req.tz_offset_minutes)?;
 
     let new = resources::NewResource {
         title: &req.title,
@@ -182,7 +182,7 @@ pub fn update_resource(
     }
 
     let scheduled = match req.scheduled_publish_at {
-        Some(ref s) => Some(Some(parse_scheduled_publish(&Some(s.clone()))?.unwrap())),
+        Some(ref s) => Some(Some(parse_scheduled_publish(&Some(s.clone()), None)?.unwrap())),
         None => None,
     };
 
@@ -316,6 +316,7 @@ pub fn validate_state_transition(
 // publisher evaluates against UTC time.
 fn parse_scheduled_publish(
     input: &Option<String>,
+    tz_offset_minutes: Option<i32>,
 ) -> Result<Option<chrono::DateTime<Utc>>, ApiError> {
     match input {
         None => Ok(None),
@@ -332,7 +333,17 @@ fn parse_scheduled_publish(
                         "scheduled_publish_at must be a valid datetime (YYYY-MM-DDTHH:MM:SS, MM/DD/YYYY h:mm AM/PM, etc.)",
                     )
                 })?;
-            Ok(Some(ndt.and_utc()))
+            let utc_dt = if let Some(offset_min) = tz_offset_minutes {
+                let offset = chrono::FixedOffset::east_opt(offset_min * 60)
+                    .unwrap_or_else(|| chrono::FixedOffset::east_opt(0).unwrap());
+                ndt.and_local_timezone(offset)
+                    .single()
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .unwrap_or_else(|| ndt.and_utc())
+            } else {
+                ndt.and_utc()
+            };
+            Ok(Some(utc_dt))
         }
     }
 }

@@ -102,6 +102,7 @@ fn job_to_response(row: &repo::ImportJobRow) -> ImportJobResponse {
         retries: row.retries,
         failure_log: row.failure_log.clone(),
         committed: row.committed,
+        created_by: row.created_by,
         created_at: row.created_at,
         updated_at: row.updated_at,
     }

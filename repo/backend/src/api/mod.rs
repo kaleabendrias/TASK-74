@@ -90,6 +90,7 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
             // Config
             .route("/config", web::get().to(config::list_config))
             .route("/config", web::post().to(config::upsert_config))
+            .route("/config/{key}", web::get().to(config::get_config_value))
             // Metrics
             .route("/metrics", web::get().to(metrics::prometheus_metrics)),
     );

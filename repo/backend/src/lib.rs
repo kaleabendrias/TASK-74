@@ -48,7 +48,6 @@ pub fn build_pool(database_url: &str, max_connections: u32) -> DbPool {
 pub fn seed_defaults(pool: &DbPool) {
     let mut conn = pool.get().expect("Failed to get DB connection for seeding");
 
-    // Check if users exist
     let count: i64 = schema::users::table
         .count()
         .get_result(&mut conn)
@@ -58,16 +57,22 @@ pub fn seed_defaults(pool: &DbPool) {
         return;
     }
 
+    // Check for INIT_TOKEN env var — if set, use it as the admin password
+    let admin_pw = std::env::var("INIT_ADMIN_PASSWORD")
+        .unwrap_or_else(|_| {
+            let pw = crypto::csrf::generate_token()[..16].to_string();
+            tracing::warn!("No INIT_ADMIN_PASSWORD set. Generated admin password: {}", pw);
+            pw
+        });
+
     tracing::info!("Seeding default facility and users...");
 
-    // Create a default facility
     diesel::sql_query(
         "INSERT INTO facilities (id, name, address) \
          VALUES ('00000000-0000-0000-0000-000000000001', 'Main Facility', '100 Tourism Blvd, Portal City, PC 00001') \
          ON CONFLICT DO NOTHING"
     ).execute(&mut conn).ok();
 
-    // Create a warehouse and bin for inventory
     diesel::sql_query(
         "INSERT INTO warehouses (id, facility_id, name) \
          VALUES ('00000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000001', 'Central Warehouse') \
@@ -80,17 +85,17 @@ pub fn seed_defaults(pool: &DbPool) {
          ON CONFLICT DO NOTHING"
     ).execute(&mut conn).ok();
 
-    // Seed users with Argon2id-hashed passwords
+    // All seeded accounts use the same initial password (from INIT_ADMIN_PASSWORD or generated)
     let users = [
-        ("admin",     "admin123",     "Administrator", None),
-        ("publisher", "publisher123", "Publisher",      None),
-        ("reviewer",  "reviewer123",  "Reviewer",       None),
-        ("clinician", "clinician123", "Clinician",      Some("00000000-0000-0000-0000-000000000001")),
-        ("clerk",     "clerk123",     "InventoryClerk", Some("00000000-0000-0000-0000-000000000001")),
+        ("admin",     "Administrator", None),
+        ("publisher", "Publisher",      None),
+        ("reviewer",  "Reviewer",       None),
+        ("clinician", "Clinician",      Some("00000000-0000-0000-0000-000000000001")),
+        ("clerk",     "InventoryClerk", Some("00000000-0000-0000-0000-000000000001")),
     ];
 
-    for (username, password, role, facility) in &users {
-        let hash = crypto::argon2id::hash(password);
+    for (username, role, facility) in &users {
+        let hash = crypto::argon2id::hash(&admin_pw);
         let fid = facility
             .map(|f| format!("'{}'", f))
             .unwrap_or_else(|| "NULL".to_string());
@@ -106,7 +111,7 @@ pub fn seed_defaults(pool: &DbPool) {
         diesel::sql_query(&q).execute(&mut conn).ok();
     }
 
-    tracing::info!("Default users seeded: admin, publisher, reviewer, clinician, clerk");
+    tracing::info!("Default users seeded. All accounts use the initial password from INIT_ADMIN_PASSWORD or the generated value above.");
 }
 
 /// Re-export the require_role macro so test crates can use it.

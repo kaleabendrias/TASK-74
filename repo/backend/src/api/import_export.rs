@@ -80,11 +80,17 @@ pub async fn upload_import(
 /// Retrieves the status and progress of an import job.
 pub async fn get_job(
     state: web::Data<AppState>,
-    _ctx: RbacContext,
+    ctx: RbacContext,
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse, ApiError> {
     let mut conn = state.db_pool.get()?;
     let job = svc::get_import_job(&mut conn, path.into_inner())?;
+
+    // Verify ownership: job creator or Administrator
+    if job.created_by != ctx.user_id {
+        ctx.require_any_role(&[crate::model::UserRole::Administrator])?;
+    }
+
     Ok(HttpResponse::Ok().json(job))
 }
 
@@ -146,7 +152,7 @@ pub async fn download_export(
     // Query real data based on export_type
     let mut data: serde_json::Value = match approval.export_type.as_str() {
         "resources" => {
-            let q = format!("SELECT row_to_json(r) as doc FROM resources r {} ORDER BY created_at DESC LIMIT 1000", facility_clause);
+            let q = format!("SELECT row_to_json(r) as doc FROM resources r {} ORDER BY created_at DESC LIMIT 10000", facility_clause);
             let rows: Vec<serde_json::Value> = diesel::sql_query(q)
             .load::<crate::repository::JsonRow>(&mut conn)
             .map_err(|e| ApiError::internal(&format!("Export query failed: {}", e)))?
@@ -154,7 +160,7 @@ pub async fn download_export(
             serde_json::json!(rows)
         }
         "lodgings" => {
-            let q = format!("SELECT row_to_json(l) as doc FROM lodgings l {} ORDER BY created_at DESC LIMIT 1000", facility_clause);
+            let q = format!("SELECT row_to_json(l) as doc FROM lodgings l {} ORDER BY created_at DESC LIMIT 10000", facility_clause);
             let rows: Vec<serde_json::Value> = diesel::sql_query(q)
             .load::<crate::repository::JsonRow>(&mut conn)
             .map_err(|e| ApiError::internal(&format!("Export query failed: {}", e)))?
@@ -162,7 +168,7 @@ pub async fn download_export(
             serde_json::json!(rows)
         }
         "inventory" => {
-            let q = format!("SELECT row_to_json(i) as doc FROM inventory_lots i {} ORDER BY created_at DESC LIMIT 1000", facility_clause);
+            let q = format!("SELECT row_to_json(i) as doc FROM inventory_lots i {} ORDER BY created_at DESC LIMIT 10000", facility_clause);
             let rows: Vec<serde_json::Value> = diesel::sql_query(q)
             .load::<crate::repository::JsonRow>(&mut conn)
             .map_err(|e| ApiError::internal(&format!("Export query failed: {}", e)))?
@@ -171,13 +177,13 @@ pub async fn download_export(
         }
         "transactions" => {
             let q = if facility_clause.is_empty() {
-                "SELECT row_to_json(t) as doc FROM inventory_transactions t ORDER BY t.created_at DESC LIMIT 1000".to_string()
+                "SELECT row_to_json(t) as doc FROM inventory_transactions t ORDER BY t.created_at DESC LIMIT 10000".to_string()
             } else {
                 format!(
                     "SELECT row_to_json(t) as doc FROM inventory_transactions t \
                      INNER JOIN inventory_lots l ON t.lot_id = l.id \
                      WHERE l.facility_id = '{}' \
-                     ORDER BY t.created_at DESC LIMIT 1000",
+                     ORDER BY t.created_at DESC LIMIT 10000",
                     ctx.scope_facility().unwrap()
                 )
             };
