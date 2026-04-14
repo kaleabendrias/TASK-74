@@ -30,3 +30,7 @@ mod test_rent_negotiation;
 mod test_state_machines;
 #[cfg(test)]
 mod test_config;
+#[cfg(test)]
+mod test_user_management;
+#[cfg(test)]
+mod test_crud_coverage;

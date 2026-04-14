@@ -327,7 +327,7 @@ pub struct MediaFileResponse {
 }
 
 // Import/Export
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct ImportJobResponse {
     pub id: String,
     pub job_type: String,
@@ -386,7 +386,7 @@ pub enum ToastKind {
     Info,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Toast {
     pub id: u32,
     pub kind: ToastKind,

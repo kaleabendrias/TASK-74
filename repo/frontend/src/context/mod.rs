@@ -22,6 +22,7 @@ impl Default for AuthState {
 
 pub enum AuthAction {
     SetAuth { user: UserProfile, csrf_token: String },
+    SetUser(UserProfile),
     Logout,
 }
 
@@ -34,6 +35,12 @@ impl Reducible for AuthState {
                 Rc::new(AuthState {
                     user: Some(user),
                     csrf_token: Some(csrf_token),
+                })
+            }
+            AuthAction::SetUser(user) => {
+                Rc::new(AuthState {
+                    user: Some(user),
+                    csrf_token: self.csrf_token.clone(),
                 })
             }
             AuthAction::Logout => {

@@ -9,7 +9,7 @@ RUN cargo install wasm-bindgen-cli@0.2.100 --locked
 
 WORKDIR /app
 COPY . .
-RUN trunk build --release index.html
+RUN trunk build --release
 
 # ============================================================
 # Stage 2 — Serve with Trunk

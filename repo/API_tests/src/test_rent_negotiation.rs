@@ -61,8 +61,9 @@ async fn rent_change_full_negotiation_flow() {
     let lodging_id = create_lodging(&pub_client, &pub_csrf, &base).await;
     let change_id = create_rent_change(&pub_client, &pub_csrf, &base, &lodging_id).await;
 
-    // Verify initial status is "pending"
-    let resp = pub_client
+    // Verify initial status is "pending" — pending list requires Reviewer/Admin role
+    let (rev_session_early, _) = login_as(&authed_client(), "reviewer").await;
+    let resp = bearer_client(&rev_session_early)
         .get(&format!("{}/api/lodgings/rent-changes/pending", base))
         .send()
         .await

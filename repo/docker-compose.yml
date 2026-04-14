@@ -32,10 +32,6 @@ services:
       # ── Database ──
       DATABASE_URL: "postgres://tourism:tourism_secret_2024@db:5432/tourism_portal"
 
-      # ── TLS ──
-      TLS_CERT_PATH: "/dev/null"
-      TLS_KEY_PATH: "/dev/null"
-
       # ── HMAC / Signing ──
       HMAC_SECRET: "h4ck-pr00f-hmac-secret-change-in-production-2024"
       REQUEST_SIGNING_KEY: "req-sign-key-tourism-portal-2024"
@@ -108,7 +104,7 @@ services:
         condition: service_started
     environment:
       DATABASE_URL: "postgres://tourism:tourism_secret_2024@db:5432/tourism_portal"
-      TEST_BASE_URL: "http://backend:8080"
+      TEST_BASE_URL: "https://backend:8080"
       RUST_LOG: "info"
     volumes:
       - coverage-data:/coverage

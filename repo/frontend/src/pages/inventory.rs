@@ -317,7 +317,7 @@ pub fn inventory_page() -> Html {
                     <div class="modal">
                         <div class="modal-header">
                             <h2>{ "Reserve Stock" }</h2>
-                            <button class="modal-close" onclick={close_reserve}>{ "\u{2715}" }</button>
+                            <button class="modal-close" onclick={close_reserve.clone()}>{ "\u{2715}" }</button>
                         </div>
                         { if let Some(lot) = reserve_lot {
                             html! {

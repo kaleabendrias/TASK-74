@@ -17,8 +17,8 @@ min_connections = 2
 connect_timeout_secs = 5
 
 [tls]
-cert_path = "/dev/null"
-key_path = "/dev/null"
+cert_path = "/app/certs/server.crt"
+key_path = "/app/certs/server.key"
 
 [auth]
 hmac_secret = "h4ck-pr00f-hmac-secret-change-in-production-2024"
