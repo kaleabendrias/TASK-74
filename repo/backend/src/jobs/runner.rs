@@ -114,7 +114,7 @@ fn process_xlsx_job(
     // Atomic staging-to-target commit
     let insert_count = valid_rows.len() as i32;
     let result = conn.transaction(|tx_conn| {
-        for (row_num, obj) in &valid_rows {
+        for (_row_num, obj) in &valid_rows {
             // Extract fields for inventory_lots — use sensible defaults for missing columns
             let item_name = obj.get("item_name").and_then(|v| v.as_str()).unwrap_or("").to_string();
             let lot_number = obj.get("lot_number").and_then(|v| v.as_str()).unwrap_or("IMPORTED").to_string();

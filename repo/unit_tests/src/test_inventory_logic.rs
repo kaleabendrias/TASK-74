@@ -1,3 +1,7 @@
+// Tests verify the reservation arithmetic that
+// tourism_backend::service::inventory::reserve implements within a database
+// transaction. The logic is replicated here for isolated unit coverage.
+
 /// Simulate the reserve logic: decrement on_hand, increment reserved, reject if insufficient.
 fn try_reserve(on_hand: i32, reserved: i32, qty: i32) -> Result<(i32, i32), &'static str> {
     if qty <= 0 {

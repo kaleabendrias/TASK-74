@@ -1,9 +1,13 @@
+# Configuration defaults. In production, override secrets via environment
+# variables or Docker secrets mounted at runtime. The values below are
+# development-only defaults and MUST NOT be used in production.
+
 [server]
 bind_address = "0.0.0.0"
 bind_port = 8080
 
 [database]
-url = ""
+url = "postgres://tourism:tourism_secret_2024@db:5432/tourism_portal"
 max_connections = 10
 min_connections = 2
 connect_timeout_secs = 5
@@ -13,8 +17,8 @@ cert_path = "/app/certs/server.crt"
 key_path = "/app/certs/server.key"
 
 [auth]
-hmac_secret = ""
-request_signing_key = ""
+hmac_secret = "h4ck-pr00f-hmac-secret-change-in-production-2024"
+request_signing_key = "req-sign-key-tourism-portal-2024"
 session_ttl_secs = 28800
 csrf_token_ttl_secs = 3600
 
@@ -25,7 +29,7 @@ parallelism = 4
 output_len = 32
 
 [crypto]
-aes256_master_key = ""
+aes256_master_key = "YWVzLTI1Ni1nY20tbWFzdGVyLWtleS0zMmI="
 
 [totp]
 issuer = "TourismPortal"

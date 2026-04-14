@@ -1,3 +1,8 @@
+// These tests verify the state transition rules that are enforced by
+// tourism_backend::service::resources::validate_state_transition (which is
+// private to the service module). The rules are duplicated here to enable
+// isolated unit testing without a database connection.
+
 use tourism_backend::model::UserRole;
 
 /// Replicate the state transition logic from service::resources for testing.

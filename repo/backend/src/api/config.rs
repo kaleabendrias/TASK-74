@@ -2,7 +2,6 @@ use actix_web::{web, HttpResponse};
 
 use crate::errors::ApiError;
 use crate::middleware::auth_guard::RbacContext;
-use crate::model::UserRole;
 use crate::repository::config as repo;
 use crate::require_role;
 use crate::AppState;

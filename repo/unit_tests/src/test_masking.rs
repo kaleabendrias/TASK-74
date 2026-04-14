@@ -1,3 +1,7 @@
+// Masks are implemented in the frontend WASM crate (frontend/src/services/mask.rs).
+// Since the unit test crate cannot depend on a wasm32 target, the logic is
+// replicated here to verify the masking rules.
+
 /// Reimplementation of frontend mask functions for unit testing.
 fn mask_phone(phone: &str) -> String {
     let digits: Vec<char> = phone.chars().filter(|c| c.is_ascii_digit()).collect();
