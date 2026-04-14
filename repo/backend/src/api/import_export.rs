@@ -2,6 +2,7 @@ use actix_multipart::Multipart;
 use actix_web::{web, HttpResponse};
 use diesel::prelude::*;
 use futures_util::StreamExt;
+use rust_xlsxwriter::{Format, Workbook};
 use uuid::Uuid;
 
 use crate::errors::ApiError;
@@ -144,7 +145,14 @@ pub async fn approve_export(
     Ok(HttpResponse::Ok().json(approval))
 }
 
-/// Downloads an approved export as a watermarked JSON file.
+/// Downloads an approved export as a watermarked `.xlsx` Excel file.
+///
+/// The workbook contains two sheets:
+///   - **"Metadata"** — export_type, generated_at, watermark, and the approval ID.
+///   - **"Data"** — one header row (column names) followed by data rows.
+///
+/// PII fields (email, phone) are masked in the data sheet before writing.
+/// Approval and watermarking logic is fully preserved.
 pub async fn download_export(
     state: web::Data<AppState>,
     ctx: RbacContext,
@@ -175,34 +183,34 @@ pub async fn download_export(
         "resources" => {
             let q = format!("SELECT row_to_json(r) as doc FROM resources r {} ORDER BY created_at DESC LIMIT 10000", facility_clause);
             let rows: Vec<serde_json::Value> = diesel::sql_query(q)
-            .load::<crate::repository::JsonRow>(&mut conn)
-            .map_err(|e| {
-                tracing::error!(error = %e, export_type = %approval.export_type, "Export query failed");
-                ApiError::internal("Failed to generate export data")
-            })?
-            .into_iter().map(|r| r.doc).collect();
+                .load::<crate::repository::JsonRow>(&mut conn)
+                .map_err(|e| {
+                    tracing::error!(error = %e, export_type = %approval.export_type, "Export query failed");
+                    ApiError::internal("Failed to generate export data")
+                })?
+                .into_iter().map(|r| r.doc).collect();
             serde_json::json!(rows)
         }
         "lodgings" => {
             let q = format!("SELECT row_to_json(l) as doc FROM lodgings l {} ORDER BY created_at DESC LIMIT 10000", facility_clause);
             let rows: Vec<serde_json::Value> = diesel::sql_query(q)
-            .load::<crate::repository::JsonRow>(&mut conn)
-            .map_err(|e| {
-                tracing::error!(error = %e, export_type = %approval.export_type, "Export query failed");
-                ApiError::internal("Failed to generate export data")
-            })?
-            .into_iter().map(|r| r.doc).collect();
+                .load::<crate::repository::JsonRow>(&mut conn)
+                .map_err(|e| {
+                    tracing::error!(error = %e, export_type = %approval.export_type, "Export query failed");
+                    ApiError::internal("Failed to generate export data")
+                })?
+                .into_iter().map(|r| r.doc).collect();
             serde_json::json!(rows)
         }
         "inventory" => {
             let q = format!("SELECT row_to_json(i) as doc FROM inventory_lots i {} ORDER BY created_at DESC LIMIT 10000", facility_clause);
             let rows: Vec<serde_json::Value> = diesel::sql_query(q)
-            .load::<crate::repository::JsonRow>(&mut conn)
-            .map_err(|e| {
-                tracing::error!(error = %e, export_type = %approval.export_type, "Export query failed");
-                ApiError::internal("Failed to generate export data")
-            })?
-            .into_iter().map(|r| r.doc).collect();
+                .load::<crate::repository::JsonRow>(&mut conn)
+                .map_err(|e| {
+                    tracing::error!(error = %e, export_type = %approval.export_type, "Export query failed");
+                    ApiError::internal("Failed to generate export data")
+                })?
+                .into_iter().map(|r| r.doc).collect();
             serde_json::json!(rows)
         }
         "transactions" => {
@@ -218,12 +226,12 @@ pub async fn download_export(
                 )
             };
             let rows: Vec<serde_json::Value> = diesel::sql_query(q)
-            .load::<crate::repository::JsonRow>(&mut conn)
-            .map_err(|e| {
-                tracing::error!(error = %e, export_type = %approval.export_type, "Export query failed");
-                ApiError::internal("Failed to generate export data")
-            })?
-            .into_iter().map(|r| r.doc).collect();
+                .load::<crate::repository::JsonRow>(&mut conn)
+                .map_err(|e| {
+                    tracing::error!(error = %e, export_type = %approval.export_type, "Export query failed");
+                    ApiError::internal("Failed to generate export data")
+                })?
+                .into_iter().map(|r| r.doc).collect();
             serde_json::json!(rows)
         }
         _ => serde_json::json!([]),
@@ -231,20 +239,100 @@ pub async fn download_export(
 
     mask_pii_fields(&mut data);
 
-    let export_data = serde_json::json!({
-        "export_type": approval.export_type,
-        "generated_at": chrono::Utc::now().to_rfc3339(),
-        "watermark": watermark,
-        "data": data,
-    });
+    // ── Build the .xlsx workbook ──────────────────────────────────────────
+    let xlsx_bytes = build_xlsx_export(&approval.export_type, watermark, &approval.id, &data)
+        .map_err(|e| {
+            tracing::error!(error = %e, "Failed to build xlsx workbook");
+            ApiError::internal("Failed to generate Excel export")
+        })?;
 
     Ok(HttpResponse::Ok()
-        .content_type("application/json")
+        .content_type("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         .insert_header((
             "Content-Disposition",
-            format!("attachment; filename=\"export_{}.json\"", approval.id),
+            format!("attachment; filename=\"export_{}.xlsx\"", approval.id),
         ))
-        .json(export_data))
+        .body(xlsx_bytes))
+}
+
+/// Serialises `data` (a JSON array of objects) into an `.xlsx` workbook and
+/// returns the raw bytes.
+///
+/// Sheet layout:
+///   - Sheet 1 "Metadata": key/value pairs — export type, watermark, generated timestamp
+///   - Sheet 2 "Data": header row + one row per JSON object; cells are written
+///     as strings so no type-inference surprises occur for IDs or ISO timestamps.
+fn build_xlsx_export(
+    export_type: &str,
+    watermark: &str,
+    export_id: &Uuid,
+    data: &serde_json::Value,
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    let mut workbook = Workbook::new();
+
+    // ── Sheet 1: Metadata ──
+    let bold = Format::new().set_bold();
+    {
+        let meta = workbook.add_worksheet();
+        meta.set_name("Metadata")?;
+        meta.write_with_format(0, 0, "Export Type", &bold)?;
+        meta.write(0, 1, export_type)?;
+        meta.write_with_format(1, 0, "Export ID", &bold)?;
+        meta.write(1, 1, export_id.to_string().as_str())?;
+        meta.write_with_format(2, 0, "Generated At", &bold)?;
+        meta.write(2, 1, chrono::Utc::now().to_rfc3339().as_str())?;
+        meta.write_with_format(3, 0, "Watermark", &bold)?;
+        meta.write(3, 1, watermark)?;
+        meta.set_column_width(0, 18)?;
+        meta.set_column_width(1, 42)?;
+    }
+
+    // ── Sheet 2: Data ──
+    {
+        let rows = data.as_array().map(|a| a.as_slice()).unwrap_or_default();
+        let data_sheet = workbook.add_worksheet();
+        data_sheet.set_name("Data")?;
+
+        if rows.is_empty() {
+            data_sheet.write(0, 0, "(no data)")?;
+        } else {
+            // Collect column names from the first object's keys (stable insertion order)
+            let columns: Vec<String> = if let Some(obj) = rows[0].as_object() {
+                obj.keys().cloned().collect()
+            } else {
+                vec![]
+            };
+
+            // Header row
+            for (col_idx, col_name) in columns.iter().enumerate() {
+                data_sheet.write_with_format(0, col_idx as u16, col_name.as_str(), &bold)?;
+            }
+
+            // Data rows
+            for (row_idx, row) in rows.iter().enumerate() {
+                let excel_row = (row_idx + 1) as u32;
+                if let Some(obj) = row.as_object() {
+                    for (col_idx, col_name) in columns.iter().enumerate() {
+                        let cell_val = match obj.get(col_name) {
+                            Some(serde_json::Value::String(s)) => s.clone(),
+                            Some(serde_json::Value::Number(n)) => n.to_string(),
+                            Some(serde_json::Value::Bool(b)) => b.to_string(),
+                            Some(serde_json::Value::Null) | None => String::new(),
+                            Some(v) => v.to_string(),
+                        };
+                        data_sheet.write(excel_row, col_idx as u16, cell_val.as_str())?;
+                    }
+                }
+            }
+
+            // Auto-width approximation for readability
+            for col_idx in 0..columns.len() {
+                data_sheet.set_column_width(col_idx as u16, 20)?;
+            }
+        }
+    }
+
+    Ok(workbook.save_to_buffer()?)
 }
 
 /// Lists all pending export approvals for reviewers.

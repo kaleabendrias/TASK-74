@@ -6,15 +6,6 @@ use crate::schema::{idempotency_keys, api_connector_logs};
 
 // ── Idempotency Keys ──
 
-/// Checks whether an idempotency nonce already exists in the database.
-pub fn nonce_exists(conn: &mut PgConnection, nonce: &str) -> QueryResult<bool> {
-    use diesel::dsl::exists;
-    diesel::select(exists(
-        idempotency_keys::table.filter(idempotency_keys::key_value.eq(nonce)),
-    ))
-    .get_result(conn)
-}
-
 #[derive(Insertable)]
 #[diesel(table_name = idempotency_keys)]
 pub struct NewIdempotencyKey<'a> {
@@ -23,13 +14,20 @@ pub struct NewIdempotencyKey<'a> {
     pub entity_id: Uuid,
 }
 
-/// Inserts a new idempotency key to prevent duplicate processing.
-pub fn insert_idempotency_key(
+/// Atomically inserts a new idempotency key using `INSERT … ON CONFLICT DO NOTHING`.
+///
+/// Returns `Ok(1)` on success and `Ok(0)` when the nonce already existed, so
+/// callers can map a `0` result to a 409 Conflict without an extra SELECT
+/// round-trip. This eliminates the TOCTOU race condition that existed when a
+/// separate `nonce_exists()` check preceded the insert.
+pub fn insert_idempotency_key_atomic(
     conn: &mut PgConnection,
     new: &NewIdempotencyKey,
 ) -> QueryResult<usize> {
     diesel::insert_into(idempotency_keys::table)
         .values(new)
+        .on_conflict(idempotency_keys::key_value)
+        .do_nothing()
         .execute(conn)
 }
 

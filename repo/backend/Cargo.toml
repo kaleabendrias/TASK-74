@@ -45,6 +45,7 @@ futures-util = "0.3"
 lapin = "2"
 prometheus = "0.13"
 sanitize-filename = "0.5"
+rust_xlsxwriter = { version = "0.79", features = ["serde"] }
 time = "=0.3.36"
 rustls = "=0.22.4"
 rustls-pemfile = "2"

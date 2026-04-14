@@ -26,8 +26,8 @@ Once all three services are healthy (typically 2-3 minutes for the first build):
 | Endpoint | URL |
 |---|---|
 | Frontend (Yew SPA) | [http://localhost:8081](http://localhost:8081) |
-| Backend API | [http://localhost:8080](http://localhost:8080) |
-| Health Check | [http://localhost:8080/api/health](http://localhost:8080/api/health) |
+| Backend API | [http://localhost:8088](http://localhost:8088) |
+| Health Check | [http://localhost:8088/api/health](http://localhost:8088/api/health) |
 | Prometheus Metrics | [http://localhost:8080/api/metrics](http://localhost:8080/api/metrics) |
 
 Log in at the frontend with any of the default users listed below. The backend automatically seeds default users and a facility on first startup when the database is empty.

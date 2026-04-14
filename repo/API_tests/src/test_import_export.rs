@@ -33,12 +33,20 @@ async fn export_request_and_approve_flow() {
     assert_eq!(body["status"], "approved");
     assert!(body["watermark_text"].is_string());
 
-    // Download should now work
+    // Download should now return a valid .xlsx binary
     let resp = c.get(&format!("{}/api/export/download/{}", base_url(), export_id))
         .send().await.unwrap();
     assert_eq!(resp.status(), 200);
-    let body: serde_json::Value = resp.json().await.unwrap();
-    assert!(body["watermark"].is_string());
+    let ct = resp.headers()
+        .get("content-type").unwrap().to_str().unwrap();
+    assert!(ct.contains("spreadsheetml"), "Expected xlsx content-type, got {}", ct);
+    let cd = resp.headers()
+        .get("content-disposition").unwrap().to_str().unwrap();
+    assert!(cd.contains(".xlsx"), "Content-Disposition must reference .xlsx file");
+    // Verify the response body is non-empty binary (PK zip magic for xlsx)
+    let bytes = resp.bytes().await.unwrap();
+    assert!(bytes.len() > 4, "xlsx body should not be empty");
+    assert_eq!(&bytes[..4], b"PK\x03\x04", "xlsx must start with ZIP/PK magic bytes");
 }
 
 #[tokio::test]

@@ -31,12 +31,9 @@ pub fn validate_and_process(
         return Err(ApiError::unauthorized("Request timestamp outside allowed window (5 minutes)"));
     }
 
-    // Nonce replay check
-    if repo::nonce_exists(conn, nonce)? {
-        return Err(ApiError::conflict("Duplicate nonce — request already processed"));
-    }
-
     // Verify HMAC signature: sign(body + nonce + timestamp)
+    // Done before the idempotency insert so invalid signatures never pollute
+    // the idempotency table.
     let body_str = String::from_utf8_lossy(body);
     let message = format!("{}{}{}", body_str, nonce, timestamp);
     if !hmac_sign::verify_signature(signing_key, &message, auth_header) {
@@ -49,8 +46,10 @@ pub fn validate_and_process(
 
     let entity_id = payload.entity_id.unwrap_or_else(Uuid::new_v4);
 
-    // Store idempotency key
-    repo::insert_idempotency_key(
+    // Atomic idempotency insert — INSERT … ON CONFLICT DO NOTHING.
+    // Returns 0 rows affected when the nonce already exists, mapping to 409
+    // without a prior SELECT (eliminates the TOCTOU window).
+    let inserted = repo::insert_idempotency_key_atomic(
         conn,
         &repo::NewIdempotencyKey {
             key_value: nonce,
@@ -58,6 +57,9 @@ pub fn validate_and_process(
             entity_id,
         },
     )?;
+    if inserted == 0 {
+        return Err(ApiError::conflict("Duplicate nonce — request already processed"));
+    }
 
     // Log the connector call
     let payload_hash = crate::crypto::sha256::hash_bytes(body);

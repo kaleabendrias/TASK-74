@@ -75,8 +75,8 @@ pub fn sidebar() -> Html {
                     { "Dashboard" }
                 </Link<Route>>
 
-                // Resources — Administrator, Publisher, Reviewer
-                { if matches!(role, UserRole::Administrator | UserRole::Publisher | UserRole::Reviewer) {
+                // Resources — Administrator, Publisher, Reviewer, Clinician (read-only)
+                { if matches!(role, UserRole::Administrator | UserRole::Publisher | UserRole::Reviewer | UserRole::Clinician) {
                     html! {
                         <>
                         <div class="sidebar-section">{ "Content" }</div>

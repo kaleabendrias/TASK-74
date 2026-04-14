@@ -23,8 +23,28 @@ pub fn spawn_job_runner(pool: DbPool) {
     });
 }
 
+/// Jobs stuck in "running" for longer than this threshold are assumed orphaned
+/// by a process crash and will be reset to "queued" for re-processing.
+const STALE_JOB_TIMEOUT_SECS: i64 = 600; // 10 minutes
+
 fn poll_and_process(pool: &DbPool) -> Result<(), Box<dyn std::error::Error>> {
     let mut conn = pool.get()?;
+
+    // ── Crash recovery: reset stale running jobs ──────────────────────────
+    // If a previous process crashed mid-job the status stays "running"
+    // indefinitely. Resetting these to "queued" re-enters them into the
+    // normal retry flow without needing manual intervention.
+    match import_jobs::reset_stale_running_jobs(&mut conn, STALE_JOB_TIMEOUT_SECS) {
+        Ok(n) if n > 0 => tracing::warn!(
+            count = n,
+            timeout_secs = STALE_JOB_TIMEOUT_SECS,
+            "Reset {} stale running import job(s) — likely orphaned by a process crash",
+            n
+        ),
+        Ok(_) => {}
+        Err(e) => tracing::error!(error = %e, "Failed to reset stale running jobs"),
+    }
+
     let jobs = import_jobs::find_queued_jobs(&mut conn, 5)?;
 
     for job in jobs {

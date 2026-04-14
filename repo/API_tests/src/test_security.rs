@@ -344,14 +344,18 @@ async fn export_data_has_pii_masking() {
         .send().await.unwrap();
     assert_eq!(resp.status(), 200);
 
-    // Download
+    // Download — response is now a .xlsx binary with PII-masked data
     let resp = admin.get(&format!("{}/api/export/download/{}", base_url(), export_id))
         .send().await.unwrap();
     assert_eq!(resp.status(), 200);
-    let body: serde_json::Value = resp.json().await.unwrap();
-    assert!(body["watermark"].is_string());
-    // Data should be present (may be empty if no resources exist, but the field exists)
-    assert!(body["data"].is_array());
+    let ct = resp.headers()
+        .get("content-type").unwrap().to_str().unwrap();
+    assert!(ct.contains("spreadsheetml"), "Export must use xlsx MIME type");
+    // Watermark is embedded in the xlsx Metadata sheet; confirm the workbook is
+    // non-trivially large (>= 4 KB for a real xlsx with metadata).
+    let bytes = resp.bytes().await.unwrap();
+    assert!(bytes.len() >= 4, "xlsx body should not be empty");
+    assert_eq!(&bytes[..4], b"PK\x03\x04", "xlsx must start with ZIP magic bytes — PII masking must not corrupt the format");
 }
 
 #[tokio::test]

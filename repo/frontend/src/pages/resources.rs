@@ -90,7 +90,7 @@ pub fn resource_list_page() -> Html {
     let role = auth.user.as_ref().map(|u| &u.role);
 
     html! {
-        <RouteGuard allowed_roles={vec![UserRole::Administrator, UserRole::Publisher, UserRole::Reviewer]}>
+        <RouteGuard allowed_roles={vec![UserRole::Administrator, UserRole::Publisher, UserRole::Reviewer, UserRole::Clinician]}>
         <>
         <div class="page-header">
             <h1>{ "Resources" }</h1>
@@ -550,7 +550,7 @@ pub fn resource_form_page(props: &ResourceFormProps) -> Html {
     let cur_state = &*state;
 
     html! {
-        <RouteGuard allowed_roles={vec![UserRole::Administrator, UserRole::Publisher, UserRole::Reviewer]}>
+        <RouteGuard allowed_roles={vec![UserRole::Administrator, UserRole::Publisher, UserRole::Reviewer, UserRole::Clinician]}>
         <>
         <div class="page-header">
             <h1>{ if is_edit { "Edit Resource" } else { "New Resource" } }</h1>
@@ -814,7 +814,7 @@ pub fn resource_history_page(props: &HistoryProps) -> Html {
     }
 
     html! {
-        <RouteGuard allowed_roles={vec![UserRole::Administrator, UserRole::Publisher, UserRole::Reviewer]}>
+        <RouteGuard allowed_roles={vec![UserRole::Administrator, UserRole::Publisher, UserRole::Reviewer, UserRole::Clinician]}>
         <>
         <div class="page-header">
             <h1>{ "Version History" }</h1>

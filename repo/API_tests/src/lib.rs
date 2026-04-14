@@ -20,3 +20,7 @@ mod test_connector;
 mod test_metrics_health;
 #[cfg(test)]
 mod test_security;
+#[cfg(test)]
+mod test_connector_envelope;
+#[cfg(test)]
+mod test_job_recovery;

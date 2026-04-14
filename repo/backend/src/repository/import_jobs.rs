@@ -59,6 +59,33 @@ pub fn find_queued_jobs(conn: &mut PgConnection, limit: i64) -> QueryResult<Vec<
         .load(conn)
 }
 
+/// Resets stale "running" jobs — those whose `updated_at` is older than
+/// `stale_after_secs` seconds — back to "queued" so the next poll cycle
+/// can pick them up.
+///
+/// A job gets stuck in "running" when the process that was executing it
+/// crashed before it could update the status to "completed" or "failed".
+/// Without this recovery, such jobs remain blocked until manual intervention.
+///
+/// Returns the number of rows updated.
+pub fn reset_stale_running_jobs(
+    conn: &mut PgConnection,
+    stale_after_secs: i64,
+) -> QueryResult<usize> {
+    let cutoff = chrono::Utc::now() - chrono::Duration::seconds(stale_after_secs);
+    diesel::update(
+        import_jobs::table
+            .filter(import_jobs::status.eq("running"))
+            .filter(import_jobs::updated_at.lt(cutoff))
+            .filter(import_jobs::retries.lt(import_jobs::max_retries)),
+    )
+    .set((
+        import_jobs::status.eq("queued"),
+        import_jobs::updated_at.eq(chrono::Utc::now()),
+    ))
+    .execute(conn)
+}
+
 /// Updates the status of an import job.
 pub fn update_job_status(
     conn: &mut PgConnection,
