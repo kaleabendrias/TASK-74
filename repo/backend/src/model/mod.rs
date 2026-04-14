@@ -102,6 +102,7 @@ pub struct CreateResourceRequest {
     #[serde(default)]
     pub media_refs: Vec<Uuid>,
     pub scheduled_publish_at: Option<String>,
+    pub contact_info: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -135,6 +136,7 @@ pub struct ResourceResponse {
     pub scheduled_publish_at: Option<DateTime<Utc>>,
     pub current_version: i32,
     pub created_by: Uuid,
+    pub facility_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

@@ -60,6 +60,7 @@ diesel::table! {
         scheduled_publish_at -> Nullable<Timestamptz>,
         current_version -> Int4,
         created_by -> Uuid,
+        facility_id -> Nullable<Uuid>,
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
     }

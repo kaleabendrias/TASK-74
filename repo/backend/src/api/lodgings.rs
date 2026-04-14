@@ -157,6 +157,10 @@ pub async fn approve_rent_change(
 
     let p = path.into_inner();
     let mut conn = state.db_pool.get()?;
+    let lodging = lodging_repo::find_lodging_by_id(&mut conn, p.id)
+        .map_err(|_| ApiError::not_found("Lodging"))?;
+    enforce_lodging_facility(&ctx, lodging.facility_id)?;
+
     let change = svc::approve_rent_change(&mut conn, p.id, p.change_id, ctx.user_id)?;
     Ok(HttpResponse::Ok().json(change))
 }
@@ -171,6 +175,10 @@ pub async fn reject_rent_change(
 
     let p = path.into_inner();
     let mut conn = state.db_pool.get()?;
+    let lodging = lodging_repo::find_lodging_by_id(&mut conn, p.id)
+        .map_err(|_| ApiError::not_found("Lodging"))?;
+    enforce_lodging_facility(&ctx, lodging.facility_id)?;
+
     let change = svc::reject_rent_change(&mut conn, p.id, p.change_id, ctx.user_id)?;
     Ok(HttpResponse::Ok().json(change))
 }

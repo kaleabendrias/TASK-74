@@ -14,6 +14,7 @@ pub fn create_resource(
     conn: &mut PgConnection,
     req: &CreateResourceRequest,
     user_id: Uuid,
+    master_key: &str,
 ) -> Result<ResourceResponse, ApiError> {
     let mut errors = vec![];
 
@@ -58,6 +59,11 @@ pub fn create_resource(
         }
     }
 
+    // Encrypt contact info if provided
+    let contact_encrypted = req.contact_info.as_ref().map(|info| {
+        crate::crypto::aes_gcm::encrypt(info.as_bytes(), master_key)
+    });
+
     // Parse scheduled_publish_at
     let scheduled = parse_scheduled_publish(&req.scheduled_publish_at)?;
 
@@ -67,6 +73,7 @@ pub fn create_resource(
         tags: serde_json::json!(req.tags),
         hours: req.hours.clone(),
         pricing: req.pricing.clone(),
+        contact_info_encrypted: contact_encrypted,
         media_refs: serde_json::json!(req.media_refs),
         address: Some(&req.address),
         latitude: req.latitude,
@@ -75,6 +82,7 @@ pub fn create_resource(
         scheduled_publish_at: scheduled,
         current_version: 1,
         created_by: user_id,
+        facility_id: None,
     };
 
     let row = resources::insert(conn, &new)?;
@@ -195,6 +203,7 @@ pub fn update_resource(
         state: req.state.clone(),
         scheduled_publish_at: scheduled,
         current_version: Some(existing.current_version + 1),
+        facility_id: None,
         updated_at: Some(Utc::now()),
     };
 
@@ -222,7 +231,8 @@ pub fn list_resources(
         state: query.state.clone(),
         category: query.category.clone(),
         tag: query.tag.clone(),
-        created_by: scope_facility, // facility scoping uses created_by for simplicity
+        created_by: None,
+        facility_id: scope_facility,
         search: query.search.clone(),
         sort_by: query.sort_by.clone().unwrap_or_else(|| "created_at".to_string()),
         sort_desc,
@@ -314,6 +324,7 @@ fn row_to_response(row: &resources::ResourceRow) -> ResourceResponse {
         scheduled_publish_at: row.scheduled_publish_at,
         current_version: row.current_version,
         created_by: row.created_by,
+        facility_id: row.facility_id,
         created_at: row.created_at,
         updated_at: row.updated_at,
     }

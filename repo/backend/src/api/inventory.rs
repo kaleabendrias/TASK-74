@@ -110,6 +110,24 @@ pub async fn list_transactions(
     require_role!(ctx, Administrator, InventoryClerk, Clinician);
 
     let mut conn = state.db_pool.get()?;
+
+    // If no lot_id filter, scope transactions to user's facility
+    if query.lot_id.is_none() {
+        if let Some(fid) = ctx.scope_facility() {
+            // For facility-scoped users without a lot_id filter, get all lot IDs
+            // in their facility and filter by those
+            let facility_lots = repo::list_lots(&mut conn, Some(fid), false)?;
+            let lot_ids: Vec<Uuid> = facility_lots.iter().map(|l| l.id).collect();
+            // Override the query to filter by these lot IDs
+            let txns = svc::list_transactions_for_lots(&mut conn, &lot_ids, &query)?;
+            return Ok(HttpResponse::Ok().json(txns));
+        }
+    } else if let Some(lid) = query.lot_id {
+        // Verify the lot belongs to the user's facility
+        let lot = repo::find_lot_by_id(&mut conn, lid).map_err(|_| ApiError::not_found("Lot"))?;
+        enforce_facility(&ctx, lot.facility_id)?;
+    }
+
     let txns = svc::list_transactions(&mut conn, &query)?;
     Ok(HttpResponse::Ok().json(txns))
 }

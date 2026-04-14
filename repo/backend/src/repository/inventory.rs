@@ -177,6 +177,39 @@ pub fn list_transactions(
         .load(conn)
 }
 
+/// Lists transactions filtered to a specific set of lot IDs.
+pub fn list_transactions_for_lots(
+    conn: &mut PgConnection,
+    lot_ids: &[Uuid],
+    filter: &TransactionFilter,
+) -> QueryResult<Vec<TransactionRow>> {
+    let mut query = inventory_transactions::table
+        .filter(inventory_transactions::lot_id.eq_any(lot_ids))
+        .into_boxed();
+
+    if let Some(lid) = filter.lot_id {
+        query = query.filter(inventory_transactions::lot_id.eq(lid));
+    }
+    if let Some(ref d) = filter.direction {
+        query = query.filter(inventory_transactions::direction.eq(d));
+    }
+    if let Some(uid) = filter.performed_by {
+        query = query.filter(inventory_transactions::performed_by.eq(uid));
+    }
+    if let Some(from) = filter.from_date {
+        let dt = from.and_hms_opt(0, 0, 0).unwrap().and_utc();
+        query = query.filter(inventory_transactions::created_at.ge(dt));
+    }
+    if let Some(to) = filter.to_date {
+        let dt = to.and_hms_opt(23, 59, 59).unwrap().and_utc();
+        query = query.filter(inventory_transactions::created_at.le(dt));
+    }
+
+    query.order(inventory_transactions::created_at.desc())
+        .select(TransactionRow::as_select())
+        .load(conn)
+}
+
 /// Returns transactions for a lot joined with the performing user's username.
 pub fn transactions_with_usernames(
     conn: &mut PgConnection,

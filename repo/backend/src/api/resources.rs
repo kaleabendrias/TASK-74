@@ -17,20 +17,30 @@ pub async fn create(
     require_role!(ctx, Administrator, Publisher);
 
     let mut conn = state.db_pool.get()?;
-    let resource = svc::create_resource(&mut conn, &body, ctx.user_id)?;
+    let resource = svc::create_resource(&mut conn, &body, ctx.user_id, &state.config.crypto.aes256_master_key)?;
     Ok(HttpResponse::Created().json(resource))
 }
 
 /// Retrieves a single resource by its ID.
-// NOTE: Resources do not carry a direct facility_id, so facility scoping is
-// not enforced here. Access control is implicitly handled via `created_by`.
 pub async fn get(
     state: web::Data<AppState>,
-    _ctx: RbacContext,
+    ctx: RbacContext,
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse, ApiError> {
+    require_role!(ctx, Administrator, Publisher, Reviewer, Clinician);
+
     let mut conn = state.db_pool.get()?;
     let resource = svc::get_resource(&mut conn, path.into_inner())?;
+
+    // Enforce facility scoping if the user is facility-scoped
+    if let Some(fid) = ctx.scope_facility() {
+        if let Some(resource_fid) = resource.facility_id {
+            if fid != resource_fid {
+                return Err(ApiError::forbidden("Access denied: resource belongs to a different facility"));
+            }
+        }
+    }
+
     Ok(HttpResponse::Ok().json(resource))
 }
 
@@ -40,6 +50,8 @@ pub async fn list(
     ctx: RbacContext,
     query: web::Query<ResourceQuery>,
 ) -> Result<HttpResponse, ApiError> {
+    require_role!(ctx, Administrator, Publisher, Reviewer, Clinician);
+
     let mut conn = state.db_pool.get()?;
 
     // Clinicians see only their facility's resources
@@ -51,9 +63,11 @@ pub async fn list(
 /// Returns the version history of a resource.
 pub async fn list_versions(
     state: web::Data<AppState>,
-    _ctx: RbacContext,
+    ctx: RbacContext,
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse, ApiError> {
+    require_role!(ctx, Administrator, Publisher, Reviewer);
+
     let mut conn = state.db_pool.get()?;
     let versions = svc::list_versions(&mut conn, path.into_inner())?;
     Ok(HttpResponse::Ok().json(versions))

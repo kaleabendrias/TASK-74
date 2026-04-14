@@ -331,7 +331,14 @@ pub fn resource_form_page(props: &ResourceFormProps) -> Html {
             spawn_local(async move {
                 let lat_f = lat.parse::<f64>().ok();
                 let lng_f = lng.parse::<f64>().ok();
-                let sched_opt = if sched_v.is_empty() { None } else { Some(sched_v) };
+                let sched_opt = if sched_v.is_empty() {
+                    None
+                } else if sched_v.len() == 16 {
+                    // datetime-local gives "YYYY-MM-DDTHH:MM", backend needs seconds
+                    Some(format!("{}:00", sched_v))
+                } else {
+                    Some(sched_v)
+                };
 
                 let result = if let Some(rid) = props_id {
                     let req = UpdateResourceRequest {

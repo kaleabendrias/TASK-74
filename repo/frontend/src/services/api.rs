@@ -303,6 +303,19 @@ pub fn export_download_url(id: &str) -> String {
     format!("{}/export/download/{}", BASE, id)
 }
 
+// ── Config ──
+pub async fn list_config() -> Result<Vec<serde_json::Value>, String> {
+    get_json(&format!("{}/config", BASE)).await
+}
+
+pub async fn upsert_config(key: &str, value: &str, feature_switch: bool) -> Result<serde_json::Value, String> {
+    post_json(&format!("{}/config", BASE), &serde_json::json!({
+        "key": key,
+        "value": value,
+        "feature_switch": feature_switch,
+    })).await
+}
+
 // ── Health ──
 pub async fn health() -> Result<HealthResponse, String> {
     get_json(&format!("{}/health", BASE)).await

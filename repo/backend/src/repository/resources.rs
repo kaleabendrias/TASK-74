@@ -22,6 +22,7 @@ pub struct ResourceRow {
     pub scheduled_publish_at: Option<DateTime<Utc>>,
     pub current_version: i32,
     pub created_by: Uuid,
+    pub facility_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -34,6 +35,7 @@ pub struct NewResource<'a> {
     pub tags: serde_json::Value,
     pub hours: serde_json::Value,
     pub pricing: serde_json::Value,
+    pub contact_info_encrypted: Option<Vec<u8>>,
     pub media_refs: serde_json::Value,
     pub address: Option<&'a str>,
     pub latitude: Option<f64>,
@@ -42,6 +44,7 @@ pub struct NewResource<'a> {
     pub scheduled_publish_at: Option<DateTime<Utc>>,
     pub current_version: i32,
     pub created_by: Uuid,
+    pub facility_id: Option<Uuid>,
 }
 
 #[derive(AsChangeset)]
@@ -59,6 +62,7 @@ pub struct ResourceUpdate {
     pub state: Option<String>,
     pub scheduled_publish_at: Option<Option<DateTime<Utc>>>,
     pub current_version: Option<i32>,
+    pub facility_id: Option<Option<Uuid>>,
     pub updated_at: Option<DateTime<Utc>>,
 }
 
@@ -95,6 +99,7 @@ pub struct ResourceFilter {
     pub category: Option<String>,
     pub tag: Option<String>,
     pub created_by: Option<Uuid>,
+    pub facility_id: Option<Uuid>,
     pub search: Option<String>,
     pub sort_by: String,
     pub sort_desc: bool,
@@ -121,6 +126,10 @@ pub fn list_filtered(
     if let Some(ref uid) = filter.created_by {
         query = query.filter(resources::created_by.eq(uid));
         count_query = count_query.filter(resources::created_by.eq(uid));
+    }
+    if let Some(ref fid) = filter.facility_id {
+        query = query.filter(resources::facility_id.eq(fid));
+        count_query = count_query.filter(resources::facility_id.eq(fid));
     }
     if let Some(ref s) = filter.search {
         let pattern = format!("%{}%", s);

@@ -2,12 +2,14 @@ use actix_web::{web, HttpResponse};
 use prometheus::{Encoder, TextEncoder};
 
 use crate::errors::ApiError;
+use crate::middleware::auth_guard::RbacContext;
 use crate::repository::{import_jobs, sessions};
 use crate::AppState;
 
 /// Returns Prometheus-formatted metrics including sessions, job queue depth, and uptime.
 pub async fn prometheus_metrics(
     state: web::Data<AppState>,
+    _ctx: RbacContext,
 ) -> Result<HttpResponse, ApiError> {
     let (active_sessions, queue_depth) = {
         let mut conn = state.db_pool.get()?;

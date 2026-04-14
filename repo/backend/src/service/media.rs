@@ -8,9 +8,6 @@ use crate::errors::ApiError;
 use crate::model::MediaFileResponse;
 use crate::repository::media as repo;
 
-const ALLOWED_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "mp4"];
-const MAX_SIZE: usize = 50 * 1024 * 1024; // 50 MB
-
 /// Validates, stores, and records an uploaded media file (extension, MIME, size, checksum).
 pub fn process_upload(
     conn: &mut PgConnection,
@@ -19,21 +16,28 @@ pub fn process_upload(
     data: &[u8],
     user_id: Uuid,
 ) -> Result<MediaFileResponse, ApiError> {
-    // Validate extension
     let ext = Path::new(original_name)
         .extension()
         .and_then(|e| e.to_str())
         .map(|e| e.to_lowercase())
         .unwrap_or_default();
 
-    if !ALLOWED_EXTENSIONS.contains(&ext.as_str()) {
+    // Derive allowed extensions from config MIME types
+    let allowed_extensions: Vec<&str> = config.allowed_mimes.iter().flat_map(|mime| {
+        match mime.as_str() {
+            "image/jpeg" => vec!["jpg", "jpeg"],
+            "image/png" => vec!["png"],
+            "image/webp" => vec!["webp"],
+            "video/mp4" => vec!["mp4"],
+            "application/pdf" => vec!["pdf"],
+            _ => vec![],
+        }
+    }).collect();
+
+    if !allowed_extensions.contains(&ext.as_str()) {
         return Err(ApiError::unprocessable(
             "INVALID_FILE_TYPE",
-            &format!(
-                "File extension '{}' not allowed. Allowed: {}",
-                ext,
-                ALLOWED_EXTENSIONS.join(", ")
-            ),
+            &format!("File extension '{}' not allowed. Allowed: {}", ext, allowed_extensions.join(", ")),
         ));
     }
 
@@ -47,7 +51,9 @@ pub fn process_upload(
     let mime_ok = match ext.as_str() {
         "jpg" | "jpeg" => mime_type == "image/jpeg",
         "png" => mime_type == "image/png",
+        "webp" => mime_type == "image/webp",
         "mp4" => mime_type == "video/mp4",
+        "pdf" => mime_type == "application/pdf",
         _ => false,
     };
     if !mime_ok {
@@ -61,10 +67,10 @@ pub fn process_upload(
     }
 
     // Size check
-    if data.len() > MAX_SIZE {
+    if data.len() > config.max_size_bytes {
         return Err(ApiError::unprocessable(
             "FILE_TOO_LARGE",
-            &format!("File size {} bytes exceeds maximum of {} bytes", data.len(), MAX_SIZE),
+            &format!("File size {} bytes exceeds maximum of {} bytes", data.len(), config.max_size_bytes),
         ));
     }
 

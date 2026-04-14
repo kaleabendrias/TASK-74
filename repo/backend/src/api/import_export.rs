@@ -120,11 +120,16 @@ pub async fn approve_export(
 /// Downloads an approved export as a watermarked JSON file.
 pub async fn download_export(
     state: web::Data<AppState>,
-    _ctx: RbacContext,
+    ctx: RbacContext,
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse, ApiError> {
     let mut conn = state.db_pool.get()?;
     let approval = svc::get_export_approval(&mut conn, path.into_inner())?;
+
+    // Verify the requester has access
+    if approval.requested_by != ctx.user_id {
+        ctx.require_any_role(&[crate::model::UserRole::Administrator])?;
+    }
 
     if approval.status != "approved" {
         return Err(ApiError::forbidden("Export has not been approved yet"));

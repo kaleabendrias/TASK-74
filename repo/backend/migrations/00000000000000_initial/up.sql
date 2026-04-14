@@ -63,6 +63,7 @@ CREATE TABLE resources (
     scheduled_publish_at  TIMESTAMPTZ,
     current_version       INTEGER NOT NULL DEFAULT 1,
     created_by            UUID NOT NULL REFERENCES users(id),
+    facility_id           UUID REFERENCES facilities(id),
     created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
 );

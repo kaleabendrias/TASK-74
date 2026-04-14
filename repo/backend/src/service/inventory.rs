@@ -159,6 +159,23 @@ pub fn list_transactions(
     Ok(rows.iter().map(tx_to_response).collect())
 }
 
+/// Lists transactions filtered to a specific set of lot IDs and additional query criteria.
+pub fn list_transactions_for_lots(
+    conn: &mut PgConnection,
+    lot_ids: &[Uuid],
+    query: &TransactionQuery,
+) -> Result<Vec<TransactionResponse>, ApiError> {
+    let filter = repo::TransactionFilter {
+        lot_id: query.lot_id,
+        direction: query.direction.clone(),
+        performed_by: query.performed_by,
+        from_date: query.from_date,
+        to_date: query.to_date,
+    };
+    let rows = repo::list_transactions_for_lots(conn, lot_ids, &filter)?;
+    Ok(rows.iter().map(tx_to_response).collect())
+}
+
 /// Generates an HTML audit trail report for all transactions on a given lot.
 pub fn audit_print_html(
     conn: &mut PgConnection,
