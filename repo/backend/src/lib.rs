@@ -57,19 +57,17 @@ pub fn seed_defaults(pool: &DbPool) {
         return;
     }
 
-    // Check for INIT_TOKEN env var — if set, use it as the admin password
-    let admin_pw = std::env::var("INIT_ADMIN_PASSWORD")
-        .unwrap_or_else(|_| {
-            let pw = crypto::csrf::generate_token()[..16].to_string();
-            // Write to a file that should be read once and deleted
-            let secret_path = "/tmp/.tourism_init_password";
-            if let Err(e) = std::fs::write(secret_path, &pw) {
-                tracing::error!(error = %e, "Failed to write init password file");
-            } else {
-                tracing::info!("Initial admin password written to {} — read and delete this file after first login", secret_path);
-            }
-            pw
-        });
+    // Require an explicit initial password via environment variable.
+    // Writing generated credentials to disk (e.g. /tmp) creates a local
+    // secret-exposure risk, so the application refuses to bootstrap without
+    // an explicitly injected secret.
+    let admin_pw = std::env::var("INIT_ADMIN_PASSWORD").unwrap_or_else(|_| {
+        panic!(
+            "FATAL: INIT_ADMIN_PASSWORD is required when bootstrapping an empty database. \
+             Set this environment variable to a strong, randomly generated password before \
+             starting the service for the first time."
+        );
+    });
 
     tracing::info!("Seeding default facility and users...");
 
@@ -117,7 +115,7 @@ pub fn seed_defaults(pool: &DbPool) {
         diesel::sql_query(&q).execute(&mut conn).ok();
     }
 
-    tracing::info!("Default users seeded. All accounts use the initial password from INIT_ADMIN_PASSWORD or the generated value above.");
+    tracing::info!("Default users seeded. All accounts use the password from INIT_ADMIN_PASSWORD.");
 }
 
 /// Validates that secrets are properly configured. Panics in non-test profiles if

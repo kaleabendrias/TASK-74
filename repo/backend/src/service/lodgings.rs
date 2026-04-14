@@ -298,12 +298,104 @@ pub fn reject_rent_change(
     Ok(rent_change_to_response(&updated))
 }
 
-/// Lists all pending rent change requests.
+/// Lists all actionable rent change requests (status: pending or countered).
 pub fn list_pending_rent_changes(
     conn: &mut PgConnection,
 ) -> Result<Vec<RentChangeResponse>, ApiError> {
     let rows = repo::list_pending_rent_changes(conn)?;
     Ok(rows.iter().map(rent_change_to_response).collect())
+}
+
+/// Records a Reviewer's counterproposal on a pending rent change.
+/// Transitions the change to status = 'countered'.
+pub fn counterpropose_rent_change(
+    conn: &mut PgConnection,
+    lodging_id: Uuid,
+    change_id: Uuid,
+    req: &crate::model::CounterproposalRequest,
+    reviewer_id: Uuid,
+) -> Result<RentChangeResponse, ApiError> {
+    let change = repo::find_rent_change(conn, change_id)?;
+    if change.lodging_id != lodging_id {
+        return Err(ApiError::not_found("Rent change"));
+    }
+    if change.status != "pending" {
+        return Err(ApiError::unprocessable(
+            "INVALID_STATUS",
+            "Only pending rent changes can receive a counterproposal",
+        ));
+    }
+
+    validation::validate_deposit_cap(req.proposed_deposit, req.proposed_rent)?;
+
+    let counter_rent = BigDecimal::from_str(&format!("{:.2}", req.proposed_rent)).unwrap();
+    let counter_deposit = BigDecimal::from_str(&format!("{:.2}", req.proposed_deposit)).unwrap();
+
+    let updated = repo::store_counterproposal(conn, change_id, counter_rent, counter_deposit, reviewer_id)?;
+
+    diesel::sql_query(
+        "INSERT INTO review_decisions (id, entity_type, entity_id, decision, decided_by, created_at) \
+         VALUES (gen_random_uuid(), 'lodging_rent_change', $1, 'countered', $2, now())"
+    )
+    .bind::<diesel::sql_types::Uuid, _>(change_id)
+    .bind::<diesel::sql_types::Uuid, _>(reviewer_id)
+    .execute(conn)?;
+
+    Ok(rent_change_to_response(&updated))
+}
+
+/// Allows the original requester (Publisher/Administrator) to accept the reviewer's
+/// counterproposal, which applies the counterproposed values to the lodging.
+pub fn accept_counterproposal(
+    conn: &mut PgConnection,
+    lodging_id: Uuid,
+    change_id: Uuid,
+    acceptor_id: Uuid,
+) -> Result<RentChangeResponse, ApiError> {
+    let change = repo::find_rent_change(conn, change_id)?;
+    if change.lodging_id != lodging_id {
+        return Err(ApiError::not_found("Rent change"));
+    }
+    if change.status != "countered" {
+        return Err(ApiError::unprocessable(
+            "INVALID_STATUS",
+            "Only countered rent changes can have their counterproposal accepted",
+        ));
+    }
+
+    let (counter_rent, counter_deposit) = match (&change.counterproposal_rent, &change.counterproposal_deposit) {
+        (Some(r), Some(d)) => (r.clone(), d.clone()),
+        _ => {
+            return Err(ApiError::internal("Counterproposal values are missing"));
+        }
+    };
+
+    let updated_change = conn.transaction(|tx_conn| {
+        let updated = repo::accept_counterproposal(tx_conn, change_id, acceptor_id)?;
+
+        // Apply the counterproposed values to the lodging
+        let changeset = repo::LodgingUpdate {
+            name: None, description: None, state: None, amenities: None,
+            facility_id: None,
+            deposit_amount: Some(Some(counter_deposit)),
+            monthly_rent: Some(Some(counter_rent)),
+            deposit_cap_validated: Some(true),
+            updated_at: Some(Utc::now()),
+        };
+        repo::update_lodging(tx_conn, lodging_id, &changeset)?;
+
+        diesel::sql_query(
+            "INSERT INTO review_decisions (id, entity_type, entity_id, decision, decided_by, created_at) \
+             VALUES (gen_random_uuid(), 'lodging_rent_change', $1, 'accepted_counter', $2, now())"
+        )
+        .bind::<diesel::sql_types::Uuid, _>(change_id)
+        .bind::<diesel::sql_types::Uuid, _>(acceptor_id)
+        .execute(tx_conn)?;
+
+        Ok::<_, diesel::result::Error>(updated)
+    })?;
+
+    Ok(rent_change_to_response(&updated_change))
 }
 
 // ── Helpers ──
@@ -375,5 +467,11 @@ fn rent_change_to_response(row: &repo::RentChangeRow) -> RentChangeResponse {
         reviewed_by: row.reviewed_by,
         reviewed_at: row.reviewed_at,
         created_at: row.created_at,
+        counterproposal_rent: row.counterproposal_rent.as_ref()
+            .and_then(|v| v.to_string().parse().ok()),
+        counterproposal_deposit: row.counterproposal_deposit.as_ref()
+            .and_then(|v| v.to_string().parse().ok()),
+        counterproposed_by: row.counterproposed_by,
+        counterproposed_at: row.counterproposed_at,
     }
 }

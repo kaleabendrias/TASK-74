@@ -117,6 +117,10 @@ diesel::table! {
         reviewed_by -> Nullable<Uuid>,
         reviewed_at -> Nullable<Timestamptz>,
         created_at -> Timestamptz,
+        counterproposal_rent -> Nullable<Numeric>,
+        counterproposal_deposit -> Nullable<Numeric>,
+        counterproposed_by -> Nullable<Uuid>,
+        counterproposed_at -> Nullable<Timestamptz>,
     }
 }
 

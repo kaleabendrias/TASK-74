@@ -211,6 +211,13 @@ pub struct RentChangeRequest {
     pub proposed_deposit: f64,
 }
 
+/// Sent by a Reviewer to counter an original rent-change proposal.
+#[derive(Debug, Clone, Serialize)]
+pub struct CounterproposalRequest {
+    pub proposed_rent: f64,
+    pub proposed_deposit: f64,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct RentChangeResponse {
     pub id: String,
@@ -222,6 +229,11 @@ pub struct RentChangeResponse {
     pub reviewed_by: Option<String>,
     pub reviewed_at: Option<String>,
     pub created_at: String,
+    // Populated when status == "countered"
+    pub counterproposal_rent: Option<f64>,
+    pub counterproposal_deposit: Option<f64>,
+    pub counterproposed_by: Option<String>,
+    pub counterproposed_at: Option<String>,
 }
 
 // Inventory

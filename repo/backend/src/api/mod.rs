@@ -15,7 +15,11 @@ use actix_web::web;
 pub fn configure_routes(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("/api")
-            .route("/health", web::get().to(health::health_check))
+            // ── Health ──────────────────────────────────────────────────────
+            // Public liveness probe — no auth, safe for load-balancer polling.
+            .route("/health", web::get().to(health::liveness))
+            // Protected readiness probe — requires auth, returns full details.
+            .route("/health/ready", web::get().to(health::readiness))
             // Auth
             .route("/auth/login", web::post().to(auth::login))
             .route("/auth/logout", web::post().to(auth::logout))
@@ -49,6 +53,15 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
                 "/lodgings/{id}/rent-change/{change_id}/reject",
                 web::post().to(lodgings::reject_rent_change),
             )
+            // Rent change negotiation
+            .route(
+                "/lodgings/{id}/rent-change/{change_id}/counterpropose",
+                web::post().to(lodgings::counterpropose_rent_change),
+            )
+            .route(
+                "/lodgings/{id}/rent-change/{change_id}/accept-counter",
+                web::post().to(lodgings::accept_counterproposal),
+            )
             // Inventory
             .route("/inventory/warehouses", web::get().to(inventory::list_warehouses))
             .route("/inventory/bins", web::get().to(inventory::list_bins))
@@ -77,6 +90,8 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
             // Import / Export
             .route("/import/upload", web::post().to(import_export::upload_import))
             .route("/import/jobs/{id}", web::get().to(import_export::get_job))
+            // SSE stream for real-time job progress
+            .route("/import/jobs/{id}/stream", web::get().to(import_export::stream_job_status))
             .route(
                 "/export/request",
                 web::post().to(import_export::request_export),
@@ -96,7 +111,7 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
             .route("/config", web::get().to(config::list_config))
             .route("/config", web::post().to(config::upsert_config))
             .route("/config/{key}", web::get().to(config::get_config_value))
-            // Metrics
+            // Metrics — Administrator only
             .route("/metrics", web::get().to(metrics::prometheus_metrics)),
     );
 }

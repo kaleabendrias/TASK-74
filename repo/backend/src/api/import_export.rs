@@ -3,6 +3,7 @@ use actix_web::{web, HttpResponse};
 use diesel::prelude::*;
 use futures_util::StreamExt;
 use rust_xlsxwriter::{Format, Workbook};
+use std::time::Duration;
 use uuid::Uuid;
 
 use crate::errors::ApiError;
@@ -333,6 +334,64 @@ fn build_xlsx_export(
     }
 
     Ok(workbook.save_to_buffer()?)
+}
+
+/// Streams import job status as Server-Sent Events (SSE).
+///
+/// Sends a `data:` event containing the `ImportJobResponse` JSON every 750 ms.
+/// The stream terminates automatically once the job reaches `completed` or `failed`.
+/// The client should close the `EventSource` on receipt of a terminal event.
+pub async fn stream_job_status(
+    state: web::Data<AppState>,
+    ctx: RbacContext,
+    path: web::Path<Uuid>,
+) -> Result<HttpResponse, ApiError> {
+    let job_id = path.into_inner();
+
+    // Verify ownership before opening the stream
+    let mut conn = state.db_pool.get()?;
+    let initial = svc::get_import_job(&mut conn, job_id)?;
+    if initial.created_by != ctx.user_id {
+        ctx.require_any_role(&[crate::model::UserRole::Administrator])?;
+    }
+    drop(conn);
+
+    let pool = state.db_pool.clone();
+
+    let sse_stream = futures_util::stream::unfold(
+        (pool, job_id, false),
+        |(pool, id, done)| async move {
+            if done {
+                return None;
+            }
+            tokio::time::sleep(Duration::from_millis(750)).await;
+
+            let pool_c = pool.clone();
+            let job_opt = tokio::task::spawn_blocking(move || {
+                let mut conn = pool_c.get().ok()?;
+                crate::service::import_export::get_import_job(&mut *conn, id).ok()
+            })
+            .await
+            .ok()
+            .flatten();
+
+            match job_opt {
+                Some(job) => {
+                    let terminal = job.status == "completed" || job.status == "failed";
+                    let data = serde_json::to_string(&job).unwrap_or_default();
+                    let event = web::Bytes::from(format!("data: {}\n\n", data));
+                    Some((Ok::<_, actix_web::Error>(event), (pool, id, terminal)))
+                }
+                None => None,
+            }
+        },
+    );
+
+    Ok(HttpResponse::Ok()
+        .content_type("text/event-stream")
+        .insert_header(("Cache-Control", "no-cache"))
+        .insert_header(("X-Accel-Buffering", "no"))
+        .streaming(sse_stream))
 }
 
 /// Lists all pending export approvals for reviewers.

@@ -1,9 +1,12 @@
-//! Import/Export page: drag-and-drop .xlsx upload with progress polling,
-//! export request flow with approval and watermarked download.
+//! Import/Export page: drag-and-drop .xlsx upload with real-time SSE job tracking,
+//! falling back to 2-second polling if the EventSource connection fails.
+//! Export request flow with approval and watermarked download.
 
 use gloo_timers::callback::Interval;
+use wasm_bindgen::prelude::Closure;
+use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::spawn_local;
-use web_sys::{HtmlInputElement, File};
+use web_sys::{HtmlInputElement, File, MessageEvent};
 use yew::prelude::*;
 
 use crate::components::route_guard::RouteGuard;
@@ -41,27 +44,103 @@ pub fn import_export_page() -> Html {
         });
     }
 
-    // Poll job progress
+    // Real-time job progress: SSE primary, polling fallback.
+    //
+    // We always produce `cleanup: Box<dyn FnOnce()>` so that every branch of
+    // the conditional returns a closure of the same concrete type, satisfying
+    // Rust's type-checker inside `use_effect_with`.
     {
         let import_job = import_job.clone();
         use_effect_with((*import_job).clone(), move |job| {
-            if let Some(j) = job.clone() {
+            let cleanup: Box<dyn FnOnce()> = if let Some(j) = job.clone() {
                 if j.status == "queued" || j.status == "running" {
-                    let import_job = import_job.clone();
-                    let jid = j.id.clone();
-                    let interval = Interval::new(2_000, move || {
-                        let import_job = import_job.clone();
-                        let jid = jid.clone();
-                        spawn_local(async move {
-                            if let Ok(updated) = api::get_import_job(&jid).await {
-                                import_job.set(Some(updated));
-                            }
-                        });
-                    });
-                    return || drop(interval);
+                    let sse_url = format!("/api/import/jobs/{}/stream", j.id);
+
+                    match web_sys::EventSource::new(&sse_url) {
+                        Ok(es) => {
+                            // ── onmessage: update job state from push events ──
+                            let import_job_msg = import_job.clone();
+                            let es_for_close = es.clone();
+                            let onmessage = Closure::<dyn Fn(MessageEvent)>::new(
+                                move |e: MessageEvent| {
+                                    let Some(raw) = e.data().as_string() else { return };
+                                    let Ok(updated) =
+                                        serde_json::from_str::<ImportJobResponse>(&raw)
+                                    else {
+                                        return;
+                                    };
+                                    let terminal = updated.status == "completed"
+                                        || updated.status == "failed";
+                                    import_job_msg.set(Some(updated));
+                                    if terminal {
+                                        es_for_close.close();
+                                    }
+                                },
+                            );
+                            es.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
+                            onmessage.forget();
+
+                            // ── onerror: SSE failed, fall back to 2-second polling ──
+                            let import_job_err = import_job.clone();
+                            let jid_err = j.id.clone();
+                            let es_for_err = es.clone();
+                            let onerror = Closure::<dyn Fn(web_sys::Event)>::new(
+                                move |_: web_sys::Event| {
+                                    es_for_err.close();
+                                    let imj = import_job_err.clone();
+                                    let jid = jid_err.clone();
+                                    // Leak the interval intentionally: the polling stops itself
+                                    // when it observes a terminal status on the next tick.
+                                    Interval::new(2_000, move || {
+                                        let imj2 = imj.clone();
+                                        let jid2 = jid.clone();
+                                        spawn_local(async move {
+                                            if let Ok(upd) = api::get_import_job(&jid2).await {
+                                                imj2.set(Some(upd));
+                                            }
+                                        });
+                                    })
+                                    .forget();
+                                },
+                            );
+                            es.set_onerror(Some(onerror.as_ref().unchecked_ref()));
+                            onerror.forget();
+
+                            Box::new(move || {
+                                es.close();
+                            }) as Box<dyn FnOnce()>
+                        }
+                        Err(_) => {
+                            // EventSource API unavailable (e.g. during local dev without TLS) —
+                            // fall back directly to 2-second HTTP polling.
+                            let import_job_poll = import_job.clone();
+                            let jid = j.id.clone();
+                            let interval = Interval::new(2_000, move || {
+                                let imj = import_job_poll.clone();
+                                let jid2 = jid.clone();
+                                spawn_local(async move {
+                                    if let Ok(updated) = api::get_import_job(&jid2).await {
+                                        imj.set(Some(updated));
+                                    }
+                                });
+                            });
+                            Box::new(move || {
+                                drop(interval);
+                            }) as Box<dyn FnOnce()>
+                        }
+                    }
+                } else {
+                    Box::new(|| {}) as Box<dyn FnOnce()>
                 }
+            } else {
+                Box::new(|| {}) as Box<dyn FnOnce()>
+            };
+
+            // The outer closure always has the same concrete type regardless of
+            // which branch above ran — `cleanup` is always `Box<dyn FnOnce()>`.
+            move || {
+                (cleanup)();
             }
-            || {}
         });
     }
 

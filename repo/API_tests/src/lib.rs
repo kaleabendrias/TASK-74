@@ -24,3 +24,9 @@ mod test_security;
 mod test_connector_envelope;
 #[cfg(test)]
 mod test_job_recovery;
+#[cfg(test)]
+mod test_rent_negotiation;
+#[cfg(test)]
+mod test_state_machines;
+#[cfg(test)]
+mod test_config;

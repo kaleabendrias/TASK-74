@@ -72,6 +72,14 @@ pub struct UserProfile {
 // Health
 // ────────────────────────────────────────
 
+/// Minimal liveness response returned by the public `/api/health` probe.
+/// Contains only what a load balancer needs — no internal details.
+#[derive(Debug, Serialize)]
+pub struct LivenessResponse {
+    pub status: String,
+}
+
+/// Full readiness response returned by the protected `/api/health/ready` probe.
 #[derive(Debug, Serialize)]
 pub struct HealthResponse {
     pub service: String,
@@ -233,6 +241,13 @@ pub struct RentChangeRequest {
     pub proposed_deposit: f64,
 }
 
+/// Submitted by a Reviewer to counter the original rent-change proposal.
+#[derive(Debug, Deserialize)]
+pub struct CounterproposalRequest {
+    pub proposed_rent: f64,
+    pub proposed_deposit: f64,
+}
+
 #[derive(Debug, Serialize)]
 pub struct RentChangeResponse {
     pub id: Uuid,
@@ -244,6 +259,11 @@ pub struct RentChangeResponse {
     pub reviewed_by: Option<Uuid>,
     pub reviewed_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
+    // Counterproposal fields — populated when status is "countered"
+    pub counterproposal_rent: Option<f64>,
+    pub counterproposal_deposit: Option<f64>,
+    pub counterproposed_by: Option<Uuid>,
+    pub counterproposed_at: Option<DateTime<Utc>>,
 }
 
 // ────────────────────────────────────────

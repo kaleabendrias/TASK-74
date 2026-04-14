@@ -6,54 +6,62 @@ use tracing_subscriber::EnvFilter;
 
 use tourism_backend::{api, build_pool, config, jobs, run_migrations, seed_defaults, service, validate_secrets, AppState};
 
-fn load_rustls_config(cfg: &config::TlsConfig) -> Option<rustls::ServerConfig> {
+/// Loads rustls server configuration from the certificate and key paths in `cfg`.
+///
+/// This function is unconditionally required — plain-HTTP startup is not
+/// supported in any profile.  Callers **must** provide valid PEM files;
+/// the application will panic with a clear diagnostic message otherwise.
+fn load_rustls_config(cfg: &config::TlsConfig) -> rustls::ServerConfig {
     let cert_path = &cfg.cert_path;
     let key_path = &cfg.key_path;
 
-    if cert_path == "/dev/null" || key_path == "/dev/null" {
-        return None;
-    }
+    let cert_file = std::fs::File::open(cert_path).unwrap_or_else(|e| {
+        panic!(
+            "FATAL: Cannot open TLS certificate at '{}': {}. \
+             TLS is required in all profiles. Provide a valid certificate.",
+            cert_path, e
+        )
+    });
 
-    let cert_file = match std::fs::File::open(cert_path) {
-        Ok(f) => f,
-        Err(e) => {
-            tracing::warn!(error = %e, path = %cert_path, "TLS cert not found, starting without TLS");
-            return None;
-        }
-    };
-    let key_file = match std::fs::File::open(key_path) {
-        Ok(f) => f,
-        Err(e) => {
-            tracing::warn!(error = %e, path = %key_path, "TLS key not found, starting without TLS");
-            return None;
-        }
-    };
+    let key_file = std::fs::File::open(key_path).unwrap_or_else(|e| {
+        panic!(
+            "FATAL: Cannot open TLS private key at '{}': {}. \
+             TLS is required in all profiles. Provide a valid private key.",
+            key_path, e
+        )
+    });
 
     let certs: Vec<_> = rustls_pemfile::certs(&mut std::io::BufReader::new(cert_file))
         .filter_map(|r| r.ok())
         .collect();
-    let key = rustls_pemfile::private_key(&mut std::io::BufReader::new(key_file))
-        .ok()
-        .flatten();
 
     if certs.is_empty() {
-        tracing::warn!("No certificates found in {}", cert_path);
-        return None;
+        panic!(
+            "FATAL: No PEM certificates found in '{}'. \
+             The file must contain at least one valid certificate block.",
+            cert_path
+        );
     }
-    let key = match key {
-        Some(k) => k,
-        None => {
-            tracing::warn!("No private key found in {}", key_path);
-            return None;
-        }
-    };
 
-    let tls_config = rustls::ServerConfig::builder()
+    let key = rustls_pemfile::private_key(&mut std::io::BufReader::new(key_file))
+        .unwrap_or_else(|e| {
+            panic!(
+                "FATAL: Failed to parse TLS private key at '{}': {}",
+                key_path, e
+            )
+        })
+        .unwrap_or_else(|| {
+            panic!(
+                "FATAL: No private key block found in '{}'. \
+                 The file must contain a PKCS#8 or RSA private key in PEM format.",
+                key_path
+            )
+        });
+
+    rustls::ServerConfig::builder()
         .with_no_client_auth()
         .with_single_cert(certs, key)
-        .ok()?;
-
-    Some(tls_config)
+        .unwrap_or_else(|e| panic!("FATAL: Failed to build TLS ServerConfig: {}", e))
 }
 
 #[actix_web::main]
@@ -92,17 +100,11 @@ async fn main() -> std::io::Result<()> {
     }
 
     let bind_addr = format!("{}:{}", cfg.server.bind_address, cfg.server.bind_port);
-    let tls_config = load_rustls_config(&cfg.tls);
 
-    if tls_config.is_none() {
-        let is_production = std::env::var("CONFIG_PROFILE").map(|p| p == "production").unwrap_or(false);
-        if is_production {
-            panic!(
-                "FATAL: TLS certificates are required in production mode but could not be loaded from {} / {}",
-                cfg.tls.cert_path, cfg.tls.key_path
-            );
-        }
-    }
+    // TLS is mandatory across all profiles.  load_rustls_config panics rather
+    // than falling back to plain HTTP, so there is no code path that starts
+    // the server without encryption.
+    let tls_config = load_rustls_config(&cfg.tls);
 
     let state = Arc::new(AppState {
         db_pool: pool,
@@ -118,11 +120,6 @@ async fn main() -> std::io::Result<()> {
             .configure(api::configure_routes)
     });
 
-    if let Some(tls) = tls_config {
-        tracing::info!("Starting server with TLS on {}", bind_addr);
-        server.bind_rustls_0_22(&bind_addr, tls)?.run().await
-    } else {
-        tracing::info!("Starting server (plain HTTP) on {}", bind_addr);
-        server.bind(&bind_addr)?.run().await
-    }
+    tracing::info!("Starting server with TLS on {}", bind_addr);
+    server.bind_rustls_0_22(&bind_addr, tls_config)?.run().await
 }

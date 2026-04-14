@@ -14,10 +14,13 @@ struct CountRow {
 }
 
 /// Returns Prometheus-formatted metrics including sessions, job queue depth, and uptime.
+/// Restricted to Administrator role — operational counters must not be visible to
+/// standard authenticated users.
 pub async fn prometheus_metrics(
     state: web::Data<AppState>,
-    _ctx: RbacContext,
+    ctx: RbacContext,
 ) -> Result<HttpResponse, ApiError> {
+    crate::require_role!(ctx, Administrator);
     let mut conn = state.db_pool.get()?;
 
     let active_sessions = sessions::count_active_sessions(&mut conn).unwrap_or(0);

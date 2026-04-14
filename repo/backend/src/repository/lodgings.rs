@@ -162,6 +162,10 @@ pub struct RentChangeRow {
     pub reviewed_by: Option<Uuid>,
     pub reviewed_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
+    pub counterproposal_rent: Option<bigdecimal::BigDecimal>,
+    pub counterproposal_deposit: Option<bigdecimal::BigDecimal>,
+    pub counterproposed_by: Option<Uuid>,
+    pub counterproposed_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Insertable)]
@@ -174,10 +178,14 @@ pub struct NewRentChange {
     pub requested_by: Uuid,
 }
 
-/// Lists all rent change requests with status = 'pending'.
+/// Lists all rent change requests that need reviewer/publisher action
+/// (status is 'pending' or 'countered').
 pub fn list_pending_rent_changes(conn: &mut PgConnection) -> QueryResult<Vec<RentChangeRow>> {
     lodging_rent_changes::table
-        .filter(lodging_rent_changes::status.eq("pending"))
+        .filter(
+            lodging_rent_changes::status.eq("pending")
+                .or(lodging_rent_changes::status.eq("countered"))
+        )
         .order(lodging_rent_changes::created_at.desc())
         .select(RentChangeRow::as_select())
         .load(conn)
@@ -216,6 +224,45 @@ pub fn update_rent_change_status(
         .set((
             lodging_rent_changes::status.eq(new_status),
             lodging_rent_changes::reviewed_by.eq(Some(reviewer)),
+            lodging_rent_changes::reviewed_at.eq(Some(Utc::now())),
+        ))
+        .returning(RentChangeRow::as_returning())
+        .get_result(conn)
+}
+
+/// Records a reviewer's counterproposal and transitions status to 'countered'.
+pub fn store_counterproposal(
+    conn: &mut PgConnection,
+    id: Uuid,
+    counter_rent: bigdecimal::BigDecimal,
+    counter_deposit: bigdecimal::BigDecimal,
+    reviewer: Uuid,
+) -> QueryResult<RentChangeRow> {
+    diesel::update(lodging_rent_changes::table.find(id))
+        .set((
+            lodging_rent_changes::status.eq("countered"),
+            lodging_rent_changes::reviewed_by.eq(Some(reviewer)),
+            lodging_rent_changes::reviewed_at.eq(Some(Utc::now())),
+            lodging_rent_changes::counterproposal_rent.eq(Some(counter_rent)),
+            lodging_rent_changes::counterproposal_deposit.eq(Some(counter_deposit)),
+            lodging_rent_changes::counterproposed_by.eq(Some(reviewer)),
+            lodging_rent_changes::counterproposed_at.eq(Some(Utc::now())),
+        ))
+        .returning(RentChangeRow::as_returning())
+        .get_result(conn)
+}
+
+/// Transitions a 'countered' rent change to 'approved', applying the counterproposed values.
+/// Returns the updated row. The caller is responsible for also updating the lodging.
+pub fn accept_counterproposal(
+    conn: &mut PgConnection,
+    id: Uuid,
+    acceptor: Uuid,
+) -> QueryResult<RentChangeRow> {
+    diesel::update(lodging_rent_changes::table.find(id))
+        .set((
+            lodging_rent_changes::status.eq("approved"),
+            lodging_rent_changes::reviewed_by.eq(Some(acceptor)),
             lodging_rent_changes::reviewed_at.eq(Some(Utc::now())),
         ))
         .returning(RentChangeRow::as_returning())

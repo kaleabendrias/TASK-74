@@ -199,3 +199,45 @@ pub async fn reject_rent_change(
     let change = svc::reject_rent_change(&mut conn, p.id, p.change_id, ctx.user_id)?;
     Ok(HttpResponse::Ok().json(change))
 }
+
+/// Submits a Reviewer's counterproposal on a pending rent change.
+/// Transitions the change to status = 'countered', recording the alternative
+/// rent and deposit values the publisher should consider.
+pub async fn counterpropose_rent_change(
+    state: web::Data<AppState>,
+    ctx: RbacContext,
+    path: web::Path<RentChangePath>,
+    body: web::Json<crate::model::CounterproposalRequest>,
+) -> Result<HttpResponse, ApiError> {
+    require_role!(ctx, Administrator, Reviewer);
+
+    let p = path.into_inner();
+    let mut conn = state.db_pool.get()?;
+    let lodging = lodging_repo::find_lodging_by_id(&mut conn, p.id)
+        .map_err(|_| ApiError::not_found("Lodging"))?;
+    enforce_lodging_facility(&ctx, lodging.facility_id)?;
+
+    let change = svc::counterpropose_rent_change(&mut conn, p.id, p.change_id, &body, ctx.user_id)?;
+    Ok(HttpResponse::Ok().json(change))
+}
+
+/// Accepts the reviewer's counterproposal on a countered rent change.
+/// Applies the counterproposed rent and deposit to the lodging and
+/// transitions the change to status = 'approved'. Restricted to the
+/// original requester's role group (Publisher / Administrator).
+pub async fn accept_counterproposal(
+    state: web::Data<AppState>,
+    ctx: RbacContext,
+    path: web::Path<RentChangePath>,
+) -> Result<HttpResponse, ApiError> {
+    require_role!(ctx, Administrator, Publisher);
+
+    let p = path.into_inner();
+    let mut conn = state.db_pool.get()?;
+    let lodging = lodging_repo::find_lodging_by_id(&mut conn, p.id)
+        .map_err(|_| ApiError::not_found("Lodging"))?;
+    enforce_lodging_facility(&ctx, lodging.facility_id)?;
+
+    let change = svc::accept_counterproposal(&mut conn, p.id, p.change_id, ctx.user_id)?;
+    Ok(HttpResponse::Ok().json(change))
+}
