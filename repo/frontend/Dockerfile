@@ -25,7 +25,11 @@ RUN curl -sSfL \
 RUN rustup target add wasm32-unknown-unknown
 
 WORKDIR /app
-COPY . .
+# Copy the frontend package and the shared logic crate it depends on.
+# frontend_logic lives at ../frontend_logic relative to the package root,
+# which cargo resolves as /frontend_logic when WORKDIR is /app.
+COPY frontend/ .
+COPY frontend_logic/ /frontend_logic/
 RUN trunk build --release
 
 # ============================================================
