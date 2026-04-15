@@ -22,6 +22,7 @@ pub use frontend_logic::models::{UserProfile, UserRole, Toast, ToastKind};
 /// Newtype wrapper so the frontend can implement the Yew `Reducible` trait
 /// (which lives in an external crate) on a locally-owned type.
 /// All field access is forwarded via `Deref` to the inner `frontend_logic` type.
+#[derive(PartialEq)]
 pub struct AuthState(pub frontend_logic::auth::AuthState);
 
 impl Default for AuthState {
@@ -72,6 +73,7 @@ pub fn auth_provider(props: &AuthProviderProps) -> Html {
 // ── Toast Context ─────────────────────────────────────────────────────────────
 
 /// Newtype wrapper for `Reducible` — same pattern as `AuthState`.
+#[derive(PartialEq)]
 pub struct ToastState(pub frontend_logic::toast::ToastState);
 
 impl Default for ToastState {

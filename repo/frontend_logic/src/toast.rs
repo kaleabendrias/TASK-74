@@ -8,7 +8,7 @@
 use std::rc::Rc;
 use crate::models::{Toast, ToastKind};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ToastState {
     pub toasts: Vec<Toast>,
     pub next_id: u32,
