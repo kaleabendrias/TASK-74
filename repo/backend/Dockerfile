@@ -3,9 +3,9 @@
 # ============================================================
 FROM rust:1.86-bookworm AS builder
 
-# Limit parallelism so the OOM killer does not target the build.
-# codegen-units=1 reduces peak memory per crate at the cost of
-# slightly slower compile — acceptable in CI/Docker.
+# Limit parallelism to prevent OOM during compilation.
+# codegen-units=1 serialises LLVM codegen; combined with JOBS=1
+# the peak RSS stays well under 2 GB even for large crates.
 ENV CARGO_BUILD_JOBS=1 \
     RUSTFLAGS="-C codegen-units=1"
 
