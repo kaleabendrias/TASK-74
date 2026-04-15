@@ -111,13 +111,19 @@ fn chunk_cursor_never_exceeds_total_rows() {
 #[allow(unused_imports)]
 use diesel::prelude::*;
 //
-// These tests require a running PostgreSQL instance. The connection URL is
-// read from the DATABASE_URL environment variable (same test DB used by the
-// API tests). They are gated on that variable being present so that the pure
-// unit test suite can still be run offline.
+// These tests require a running PostgreSQL instance pointed to by DATABASE_URL
+// (the isolated tourism_portal_test database in the Docker test environment).
+// Missing DATABASE_URL causes a loud failure rather than a silent pass so
+// the gap is visible outside the Docker runner.
 
-fn test_db_url() -> Option<String> {
-    std::env::var("DATABASE_URL").ok()
+fn require_db_url() -> String {
+    std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+        panic!(
+            "DATABASE_URL is not set. DB integration tests require a reachable \
+             PostgreSQL instance. Run via `./run_tests.sh` or export DATABASE_URL \
+             pointing to a local test database."
+        )
+    })
 }
 
 fn open_conn(url: &str) -> diesel::PgConnection {
@@ -129,7 +135,7 @@ fn open_conn(url: &str) -> diesel::PgConnection {
 /// Staging table created for a job must be visible in information_schema.
 #[test]
 fn staging_table_exists_after_create() {
-    let Some(url) = test_db_url() else { return };
+    let url = require_db_url();
     let mut conn = open_conn(&url);
     let name = format!("_test_staging_{}", uuid::Uuid::new_v4().to_string().replace('-', "_"));
 
@@ -148,7 +154,7 @@ fn staging_table_exists_after_create() {
 /// After dropping a staging table it must no longer be reported as existing.
 #[test]
 fn staging_table_absent_after_drop() {
-    let Some(url) = test_db_url() else { return };
+    let url = require_db_url();
     let mut conn = open_conn(&url);
     let name = format!("_test_staging_{}", uuid::Uuid::new_v4().to_string().replace('-', "_"));
 
@@ -167,7 +173,7 @@ fn staging_table_absent_after_drop() {
 fn cursor_persisted_in_db() {
     use tourism_backend::repository::import_jobs as repo;
 
-    let Some(url) = test_db_url() else { return };
+    let url = require_db_url();
     let mut conn = open_conn(&url);
 
     // We need a valid user UUID for the created_by FK. Use a nil UUID and
@@ -207,7 +213,7 @@ fn cursor_persisted_in_db() {
 fn staging_table_name_persisted_in_job() {
     use tourism_backend::repository::import_jobs as repo;
 
-    let Some(url) = test_db_url() else { return };
+    let url = require_db_url();
     let mut conn = open_conn(&url);
 
     // Ensure nil user exists.

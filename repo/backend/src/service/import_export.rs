@@ -70,11 +70,7 @@ pub fn approve_export(
         ));
     }
 
-    let watermark = if watermark_enabled {
-        format!("{}@{}", approver_username, chrono::Utc::now().format("%Y%m%d%H%M%S"))
-    } else {
-        String::new()
-    };
+    let watermark = generate_watermark(approver_username, watermark_enabled);
     let row = export_repo::approve_export(conn, id, approver_id, &watermark)?;
     Ok(approval_to_response(&row))
 }
@@ -96,6 +92,16 @@ pub fn list_pending_exports(
 }
 
 // ── Helpers ──
+
+/// Generates a watermark string in the format `{username}@{YYYYMMDDHHmmSS}` when
+/// the feature flag is enabled, or an empty string when it is disabled.
+pub fn generate_watermark(username: &str, enabled: bool) -> String {
+    if enabled {
+        format!("{}@{}", username, chrono::Utc::now().format("%Y%m%d%H%M%S"))
+    } else {
+        String::new()
+    }
+}
 
 fn job_to_response(row: &repo::ImportJobRow) -> ImportJobResponse {
     ImportJobResponse {

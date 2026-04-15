@@ -1,25 +1,10 @@
 //! Tests for the export_watermark feature flag.
 //!
-//! Verifies that the watermark string is generated when the flag is enabled
-//! and omitted (empty) when the flag is disabled — matching the behaviour in
-//! `backend::service::import_export::approve_export`.
-
-/// Mirrors the watermark generation logic extracted from the service.
-fn generate_watermark(approver_username: &str, watermark_enabled: bool) -> String {
-    if watermark_enabled {
-        // Format matches the production implementation:
-        // "{username}@{YYYYMMDDHHmmSS}"
-        format!(
-            "{}@{}",
-            approver_username,
-            chrono::Utc::now().format("%Y%m%d%H%M%S")
-        )
-    } else {
-        String::new()
-    }
-}
+//! Exercises `tourism_backend::service::import_export::generate_watermark` directly
+//! to verify that the production function's output matches the expected format.
 
 use chrono::Utc;
+use tourism_backend::service::import_export::generate_watermark;
 
 // ── Tests ──────────────────────────────────────────────────────────────────
 

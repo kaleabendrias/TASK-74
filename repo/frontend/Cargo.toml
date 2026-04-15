@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+frontend_logic = { path = "../frontend_logic" }
 yew = { version = "0.21", features = ["csr"] }
 yew-router = "0.18"
 serde = { version = "1", features = ["derive"] }

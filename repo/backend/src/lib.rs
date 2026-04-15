@@ -57,18 +57,6 @@ pub fn seed_defaults(pool: &DbPool) {
         return;
     }
 
-    // Require an explicit initial password via environment variable.
-    // Writing generated credentials to disk (e.g. /tmp) creates a local
-    // secret-exposure risk, so the application refuses to bootstrap without
-    // an explicitly injected secret.
-    let admin_pw = std::env::var("INIT_ADMIN_PASSWORD").unwrap_or_else(|_| {
-        panic!(
-            "FATAL: INIT_ADMIN_PASSWORD is required when bootstrapping an empty database. \
-             Set this environment variable to a strong, randomly generated password before \
-             starting the service for the first time."
-        );
-    });
-
     tracing::info!("Seeding default facility and users...");
 
     diesel::sql_query(
@@ -89,17 +77,17 @@ pub fn seed_defaults(pool: &DbPool) {
          ON CONFLICT DO NOTHING"
     ).execute(&mut conn).ok();
 
-    // All seeded accounts use the same initial password (from INIT_ADMIN_PASSWORD or generated)
-    let users = [
-        ("admin",     "Administrator", None),
-        ("publisher", "Publisher",      None),
-        ("reviewer",  "Reviewer",       None),
-        ("clinician", "Clinician",      Some("00000000-0000-0000-0000-000000000001")),
-        ("clerk",     "InventoryClerk", Some("00000000-0000-0000-0000-000000000001")),
+    // Each seeded account has its own fixed password for reliable tester login.
+    let users: &[(&str, &str, &str, Option<&str>)] = &[
+        ("admin",     "Admin@2024",     "Administrator", None),
+        ("publisher", "Pub@2024",       "Publisher",     None),
+        ("reviewer",  "Rev@2024",       "Reviewer",      None),
+        ("clinician", "Clin@2024",      "Clinician",     Some("00000000-0000-0000-0000-000000000001")),
+        ("clerk",     "Clerk@2024",     "InventoryClerk",Some("00000000-0000-0000-0000-000000000001")),
     ];
 
-    for (username, role, facility) in &users {
-        let hash = crypto::argon2id::hash(&admin_pw);
+    for (username, password, role, facility) in users {
+        let hash = crypto::argon2id::hash(password);
         let fid = facility
             .map(|f| format!("'{}'", f))
             .unwrap_or_else(|| "NULL".to_string());
@@ -115,7 +103,7 @@ pub fn seed_defaults(pool: &DbPool) {
         diesel::sql_query(&q).execute(&mut conn).ok();
     }
 
-    tracing::info!("Default users seeded. All accounts use the password from INIT_ADMIN_PASSWORD.");
+    tracing::info!("Default users seeded with fixed per-user credentials.");
 }
 
 /// Validates that secrets are properly configured. Panics in non-test profiles if

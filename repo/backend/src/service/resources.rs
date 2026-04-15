@@ -361,7 +361,7 @@ pub fn validate_state_transition(
 // All datetime inputs are treated as UTC. The frontend is responsible
 // for converting local time to UTC before submission. The scheduled
 // publisher evaluates against UTC time.
-fn parse_scheduled_publish(
+pub fn parse_scheduled_publish(
     input: &Option<String>,
     tz_offset_minutes: Option<i32>,
 ) -> Result<Option<chrono::DateTime<Utc>>, ApiError> {

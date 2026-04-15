@@ -3,5 +3,7 @@ members = [
     "backend",
     "unit_tests",
     "API_tests",
+    "frontend_tests",
+    "frontend_logic",
 ]
 resolver = "2"

@@ -10,6 +10,7 @@ use crate::context::{AuthAction, AuthContext, ToastAction, ToastContext};
 use crate::models::{LoginRequest, ToastKind};
 use crate::router::Route;
 use crate::services::api;
+use frontend_logic::validation::validate_login;
 
 #[function_component(LoginPage)]
 pub fn login_page() -> Html {
@@ -42,15 +43,11 @@ pub fn login_page() -> Html {
         let password = password.clone();
         let field_errors = field_errors.clone();
         move || -> bool {
-            let mut errs = std::collections::HashMap::new();
-            if username.is_empty() {
-                errs.insert("username".into(), "Username is required".into());
-            }
-            if password.is_empty() {
-                errs.insert("password".into(), "Password is required".into());
-            } else if password.len() < 4 {
-                errs.insert("password".into(), "Password must be at least 4 characters".into());
-            }
+            let errs: std::collections::HashMap<String, String> =
+                validate_login(&*username, &*password)
+                    .into_iter()
+                    .map(|(f, m)| (f.to_string(), m.to_string()))
+                    .collect();
             field_errors.set(errs.clone());
             errs.is_empty()
         }
@@ -80,16 +77,12 @@ pub fn login_page() -> Html {
             let nav = nav.clone();
             let field_errors = field_errors.clone();
 
-            // Client-side validation
-            let mut errs = std::collections::HashMap::new();
-            if username.is_empty() {
-                errs.insert("username".into(), "Username is required".into());
-            }
-            if password.is_empty() {
-                errs.insert("password".into(), "Password is required".into());
-            } else if password.len() < 4 {
-                errs.insert("password".into(), "Password must be at least 4 characters".into());
-            }
+            // Client-side validation — delegates to frontend_logic::validation::validate_login
+            let errs: std::collections::HashMap<String, String> =
+                validate_login(&*username, &*password)
+                    .into_iter()
+                    .map(|(f, m)| (f.to_string(), m.to_string()))
+                    .collect();
             field_errors.set(errs.clone());
             if !errs.is_empty() { return; }
 

@@ -6,6 +6,10 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Install cargo-tarpaulin for coverage measurement
+RUN cargo install cargo-tarpaulin --version "0.31.2" --locked \
+    && cargo tarpaulin --version
+
 WORKDIR /app
 
 # Copy workspace manifest first for caching
@@ -13,13 +17,17 @@ COPY Cargo.toml ./
 COPY backend/Cargo.toml ./backend/Cargo.toml
 COPY unit_tests/Cargo.toml ./unit_tests/Cargo.toml
 COPY API_tests/Cargo.toml ./API_tests/Cargo.toml
+COPY frontend_tests/Cargo.toml ./frontend_tests/Cargo.toml
+COPY frontend_logic/Cargo.toml ./frontend_logic/Cargo.toml
 
 # Create stub src files so cargo can resolve the workspace
-RUN mkdir -p backend/src unit_tests/src API_tests/src && \
+RUN mkdir -p backend/src unit_tests/src API_tests/src frontend_tests/src frontend_logic/src && \
     echo "fn main() {}" > backend/src/main.rs && \
     echo "" > backend/src/lib.rs && \
     echo "" > unit_tests/src/lib.rs && \
-    echo "" > API_tests/src/lib.rs
+    echo "" > API_tests/src/lib.rs && \
+    echo "" > frontend_tests/src/lib.rs && \
+    echo "" > frontend_logic/src/lib.rs
 
 # Pre-fetch dependencies
 RUN cargo fetch 2>/dev/null || true
@@ -28,10 +36,14 @@ RUN cargo fetch 2>/dev/null || true
 COPY backend/ ./backend/
 COPY unit_tests/ ./unit_tests/
 COPY API_tests/ ./API_tests/
+COPY frontend_tests/ ./frontend_tests/
+COPY frontend_logic/ ./frontend_logic/
 
 # Build tests (not run — just compile to catch errors early)
 RUN cargo test --no-run -p unit_tests 2>&1 || true
 RUN cargo test --no-run -p api_tests 2>&1 || true
+RUN cargo test --no-run -p frontend_tests 2>&1 || true
+RUN cargo test --no-run -p frontend_logic 2>&1 || true
 
 RUN mkdir -p /coverage
 

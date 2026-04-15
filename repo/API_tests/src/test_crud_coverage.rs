@@ -668,7 +668,8 @@ async fn import_upload_valid_xlsx_creates_job() {
     );
 }
 
-/// GET /api/import/jobs/:id/stream returns 200 with text/event-stream content-type.
+/// GET /api/import/jobs/:id/stream streams valid SSE events with JSON payloads until
+/// the job reaches a terminal state (completed or failed).
 #[tokio::test]
 async fn import_job_sse_stream_endpoint_responds() {
     let pool = setup_pool();
@@ -678,7 +679,7 @@ async fn import_job_sse_stream_endpoint_responds() {
     let (session, csrf) = login_as(&authed_client(), "admin").await;
     let c = bearer_client(&session);
 
-    // Create a job first
+    // Create an import job by uploading the sample XLSX
     let xlsx_bytes = include_bytes!("fixtures/sample_import.xlsx");
     let form = reqwest::multipart::Form::new().part(
         "file",
@@ -699,22 +700,94 @@ async fn import_job_sse_stream_endpoint_responds() {
         .unwrap()
         .to_string();
 
-    // SSE stream — just verify the endpoint accepts the connection
-    let resp = c
+    // Open the SSE stream; server closes the connection on job completion/failure
+    let stream_resp = c
         .get(&format!("{}/api/import/jobs/{}/stream", base, job_id))
         .send()
         .await
         .unwrap();
+
     assert_eq!(
-        resp.status(),
+        stream_resp.status(),
         200,
         "SSE stream endpoint must return 200, got {}",
-        resp.status()
+        stream_resp.status()
     );
-    let ct = resp.headers().get("content-type").unwrap().to_str().unwrap();
+    let ct = stream_resp
+        .headers()
+        .get("content-type")
+        .unwrap()
+        .to_str()
+        .unwrap();
     assert!(
         ct.contains("text/event-stream"),
         "SSE stream must use text/event-stream content-type, got {}",
         ct
+    );
+
+    // Consume the full body — the server closes the connection once the job
+    // reaches a terminal state, so this completes naturally.
+    let body = tokio::time::timeout(
+        std::time::Duration::from_secs(60),
+        stream_resp.text(),
+    )
+    .await
+    .expect("SSE stream did not terminate within 60 seconds")
+    .expect("Failed to read SSE body");
+
+    // Parse all SSE events: each event is a line "data: {JSON}" followed by blank line
+    let events: Vec<serde_json::Value> = body
+        .split("\n\n")
+        .filter(|chunk| chunk.trim_start().starts_with("data: "))
+        .filter_map(|chunk| {
+            let json_str = chunk
+                .lines()
+                .find(|l| l.starts_with("data: "))
+                .map(|l| l.trim_start_matches("data: ").trim())?;
+            serde_json::from_str(json_str).ok()
+        })
+        .collect();
+
+    assert!(
+        !events.is_empty(),
+        "SSE stream must emit at least one event; body was: {:?}",
+        &body[..body.len().min(500)]
+    );
+
+    // Every event must carry a valid 'status' field
+    let valid_statuses = ["queued", "running", "completed", "failed"];
+    for (i, event) in events.iter().enumerate() {
+        let status = event["status"]
+            .as_str()
+            .unwrap_or_else(|| panic!("SSE event {} missing 'status' field: {}", i, event));
+        assert!(
+            valid_statuses.contains(&status),
+            "SSE event {} has invalid status '{}'; valid: {:?}",
+            i,
+            status,
+            valid_statuses
+        );
+    }
+
+    // Every event must carry a numeric 'progress_percent' field (0–100)
+    for (i, event) in events.iter().enumerate() {
+        let pct = event["progress_percent"]
+            .as_i64()
+            .unwrap_or_else(|| panic!("SSE event {} missing numeric 'progress_percent': {}", i, event));
+        assert!(
+            (0..=100).contains(&pct),
+            "SSE event {} progress_percent {} is out of range 0-100",
+            i,
+            pct
+        );
+    }
+
+    // The final event must be a terminal state
+    let final_event = events.last().unwrap();
+    let final_status = final_event["status"].as_str().unwrap();
+    assert!(
+        final_status == "completed" || final_status == "failed",
+        "SSE stream must end with 'completed' or 'failed', got: '{}'",
+        final_status
     );
 }

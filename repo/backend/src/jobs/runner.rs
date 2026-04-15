@@ -154,36 +154,14 @@ fn process_xlsx_job(
         for (i, row) in rows.iter().skip(1).enumerate() {
             let row_num = i + 1;
             let mut obj = serde_json::Map::new();
-            let mut row_errors = Vec::new();
 
             for (j, cell) in row.iter().enumerate() {
                 let key = header_names.get(j).cloned().unwrap_or_else(|| format!("col_{}", j));
                 let val = cell.to_string().trim().to_string();
-                obj.insert(key.clone(), serde_json::Value::String(val.clone()));
-
-                if key == "item_name" && val.is_empty() {
-                    row_errors.push("missing required field 'item_name'".to_string());
-                }
-                if key == "quantity_on_hand" && val.parse::<i32>().is_err() {
-                    row_errors.push(format!("invalid integer for 'quantity_on_hand': '{}'", val));
-                }
-                // Validate UUID format for location fields when the column is present
-                if (key == "facility_id" || key == "warehouse_id" || key == "bin_id")
-                    && !val.is_empty()
-                    && uuid::Uuid::parse_str(&val).is_err()
-                {
-                    row_errors.push(format!("invalid UUID for '{}': '{}'", key, val));
-                }
+                obj.insert(key, serde_json::Value::String(val));
             }
 
-            // Require facility_id, warehouse_id, and bin_id as explicit non-empty columns
-            for req in &["facility_id", "warehouse_id", "bin_id"] {
-                match obj.get(*req).and_then(|v| v.as_str()) {
-                    None | Some("") => row_errors.push(format!("missing required field '{}'", req)),
-                    _ => {}
-                }
-            }
-
+            let row_errors = validate_import_row_fields(&obj);
             if !row_errors.is_empty() {
                 errors.push(format!("Row {}: {}", row_num, row_errors.join("; ")));
             }
@@ -326,6 +304,44 @@ pub fn drop_staging_table(conn: &mut PgConnection, name: &str) {
 struct BoolRow {
     #[diesel(sql_type = diesel::sql_types::Bool)]
     exists: bool,
+}
+
+/// Validates a single import row map, returning a list of human-readable error
+/// strings. An empty return value means the row is valid.
+///
+/// Rules enforced:
+/// - `item_name`: required, non-empty.
+/// - `quantity_on_hand`: if present, must parse as `i32`.
+/// - `facility_id`, `warehouse_id`, `bin_id`: required non-empty; if non-empty, must
+///   be a valid UUID.
+pub fn validate_import_row_fields(obj: &serde_json::Map<String, serde_json::Value>) -> Vec<String> {
+    let mut errors = Vec::new();
+
+    // item_name is required and non-empty
+    match obj.get("item_name").and_then(|v| v.as_str()) {
+        None | Some("") => errors.push("missing required field 'item_name'".to_string()),
+        _ => {}
+    }
+
+    // quantity_on_hand must parse as i32 when present
+    if let Some(val) = obj.get("quantity_on_hand").and_then(|v| v.as_str()) {
+        if val.parse::<i32>().is_err() {
+            errors.push(format!("invalid integer for 'quantity_on_hand': '{}'", val));
+        }
+    }
+
+    // UUID fields: required non-empty and must be valid UUIDs
+    for key in &["facility_id", "warehouse_id", "bin_id"] {
+        match obj.get(*key).and_then(|v| v.as_str()) {
+            None | Some("") => errors.push(format!("missing required field '{}'", key)),
+            Some(val) if uuid::Uuid::parse_str(val).is_err() => {
+                errors.push(format!("invalid UUID for '{}': '{}'", key, val));
+            }
+            _ => {}
+        }
+    }
+
+    errors
 }
 
 /// Spawns a background task that publishes resources whose scheduled_publish_at has arrived.

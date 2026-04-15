@@ -269,6 +269,15 @@ pub fn validate_transaction_input(direction: &str, quantity: i32) -> Result<(), 
 
 // ── Helpers ──
 
+/// Returns true when the lot is expiring within 30 days (or has already expired).
+/// A `None` expiration date is treated as non-expiring.
+pub fn is_near_expiry(expiration_date: Option<chrono::NaiveDate>) -> bool {
+    expiration_date.map_or(false, |d| {
+        let cutoff = Utc::now().date_naive() + chrono::Duration::days(30);
+        d <= cutoff
+    })
+}
+
 fn escape_html(s: &str) -> String {
     s.replace('&', "&amp;")
      .replace('<', "&lt;")
@@ -278,10 +287,7 @@ fn escape_html(s: &str) -> String {
 }
 
 fn lot_to_response(row: &repo::LotRow) -> LotResponse {
-    let near_expiry = row.expiration_date.map_or(false, |d| {
-        let cutoff = Utc::now().date_naive() + chrono::Duration::days(30);
-        d <= cutoff
-    });
+    let near_expiry = is_near_expiry(row.expiration_date);
     LotResponse {
         id: row.id,
         facility_id: row.facility_id,

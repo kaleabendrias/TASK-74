@@ -1,56 +1,28 @@
 //! Tests for scheduled_publish_at timezone conversion.
 //!
-//! The backend's `parse_scheduled_publish` converts a naive local datetime
-//! plus a `tz_offset_minutes` value into UTC.  The offset follows the ISO /
-//! chrono sign convention: positive = east of UTC (e.g. UTC+5 → +300),
-//! negative = west (e.g. UTC-8 → -480).  The browser sends the negated value
-//! of JavaScript's `Date.getTimezoneOffset()`.
+//! Exercises `tourism_backend::service::resources::parse_scheduled_publish` directly.
+//!
+//! The function converts a naive local datetime plus a `tz_offset_minutes` value into
+//! UTC. The offset follows the ISO / chrono sign convention: positive = east of UTC
+//! (e.g. UTC+5 → +300), negative = west (e.g. UTC-8 → -480).
 
-use chrono::{DateTime, FixedOffset, NaiveDateTime, TimeZone, Utc};
-
-/// Mirrors the backend `parse_scheduled_publish` logic so these unit tests can
-/// run without a database.
-fn parse_scheduled_publish(
-    input: &Option<String>,
-    tz_offset_minutes: Option<i32>,
-) -> Result<Option<DateTime<Utc>>, String> {
-    match input {
-        None => Ok(None),
-        Some(s) if s.is_empty() => Ok(None),
-        Some(s) => {
-            let ndt = NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S")
-                .or_else(|_| NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M"))
-                .or_else(|_| NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S"))
-                .or_else(|_| NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M"))
-                .map_err(|_| "INVALID_DATETIME".to_string())?;
-
-            let utc_dt = if let Some(offset_min) = tz_offset_minutes {
-                let offset = FixedOffset::east_opt(offset_min * 60)
-                    .unwrap_or_else(|| FixedOffset::east_opt(0).unwrap());
-                ndt.and_local_timezone(offset)
-                    .single()
-                    .map(|dt| dt.with_timezone(&Utc))
-                    .unwrap_or_else(|| ndt.and_utc())
-            } else {
-                ndt.and_utc()
-            };
-            Ok(Some(utc_dt))
-        }
-    }
-}
+use chrono::{TimeZone, Utc};
+use tourism_backend::service::resources::parse_scheduled_publish;
 
 // ── Tests ──────────────────────────────────────────────────────────────────
 
 #[test]
 fn no_input_returns_none() {
     let result = parse_scheduled_publish(&None, None);
-    assert_eq!(result, Ok(None));
+    assert!(result.is_ok());
+    assert!(result.unwrap().is_none());
 }
 
 #[test]
 fn empty_string_returns_none() {
     let result = parse_scheduled_publish(&Some(String::new()), None);
-    assert_eq!(result, Ok(None));
+    assert!(result.is_ok());
+    assert!(result.unwrap().is_none());
 }
 
 #[test]

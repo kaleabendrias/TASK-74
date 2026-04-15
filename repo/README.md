@@ -62,12 +62,12 @@ chmod +x run_tests.sh
 
 ## Seeded Credentials
 
-The database is pre-seeded with the following test users on startup. All accounts share the password defined by the `INIT_ADMIN_PASSWORD` environment variable.
+The database is pre-seeded with the following test users on startup. Each account has its own fixed password so testers can log in without any extra configuration.
 
 | Role | Username | Password | Notes |
 | :--- | :--- | :--- | :--- |
-| **Administrator** | `admin` | *(value of `INIT_ADMIN_PASSWORD`)* | Full access to all system modules including metrics and config. |
-| **Publisher** | `publisher` | *(same)* | Creates and submits resources and lodgings; manages rent-change requests. |
-| **Reviewer** | `reviewer` | *(same)* | Approves resources and lodgings; issues counterproposals on rent changes. |
-| **Clinician** | `clinician` | *(same)* | Read-only access to inventory within assigned facility. |
-| **InventoryClerk** | `clerk` | *(same)* | Full inventory management within assigned facility. |
+| **Administrator** | `admin` | `Admin@2024` | Full access to all system modules including metrics and config. |
+| **Publisher** | `publisher` | `Pub@2024` | Creates and submits resources and lodgings; manages rent-change requests. |
+| **Reviewer** | `reviewer` | `Rev@2024` | Approves resources and lodgings; issues counterproposals on rent changes. |
+| **Clinician** | `clinician` | `Clin@2024` | Read-only access to inventory within assigned facility. |
+| **InventoryClerk** | `clerk` | `Clerk@2024` | Full inventory management within assigned facility. |

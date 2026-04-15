@@ -1,0 +1,15 @@
+[package]
+name = "frontend_tests"
+version = "0.1.0"
+edition = "2021"
+
+# Pure-Rust component logic tests for the Yew frontend.
+# All tests import from `frontend_logic` — the shared production logic crate —
+# so that changes to production code are caught here immediately, with no
+# duplicated mirror definitions.
+
+[dependencies]
+frontend_logic = { path = "../frontend_logic" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }

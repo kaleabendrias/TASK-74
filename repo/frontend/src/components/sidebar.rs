@@ -1,5 +1,8 @@
 //! Persistent sidebar navigation with role-conditional menu items, user info footer,
 //! and responsive hamburger toggle below 768px.
+//!
+//! Section visibility is determined by `frontend_logic::sidebar::visible_sections`
+//! so the same logic is exercised by `frontend_tests`.
 
 use yew::prelude::*;
 use yew_router::prelude::*;
@@ -9,6 +12,8 @@ use crate::context::{AuthAction, AuthContext, ToastAction, ToastContext};
 use crate::models::{ToastKind, UserRole};
 use crate::router::Route;
 use crate::services::api;
+
+use frontend_logic::sidebar::visible_sections;
 
 #[function_component(Sidebar)]
 pub fn sidebar() -> Html {
@@ -24,6 +29,7 @@ pub fn sidebar() -> Html {
     };
 
     let role = &user.role;
+    let sections = visible_sections(role);
 
     let toggle = {
         let open = open.clone();
@@ -75,61 +81,48 @@ pub fn sidebar() -> Html {
                     { "Dashboard" }
                 </Link<Route>>
 
-                // Resources — Administrator, Publisher, Reviewer, Clinician (read-only)
-                { if matches!(role, UserRole::Administrator | UserRole::Publisher | UserRole::Reviewer | UserRole::Clinician) {
-                    html! {
-                        <>
-                        <div class="sidebar-section">{ "Content" }</div>
-                        <Link<Route> to={Route::ResourceList} classes={is_active(&Route::ResourceList)}>
-                            { "Resources" }
-                        </Link<Route>>
-                        <Link<Route> to={Route::LodgingList} classes={is_active(&Route::LodgingList)}>
-                            { "Lodgings" }
-                        </Link<Route>>
-                        </>
-                    }
-                } else { html!{} }}
+                { if sections.contains(&"Content") { html! {
+                    <>
+                    <div class="sidebar-section">{ "Content" }</div>
+                    <Link<Route> to={Route::ResourceList} classes={is_active(&Route::ResourceList)}>
+                        { "Resources" }
+                    </Link<Route>>
+                    <Link<Route> to={Route::LodgingList} classes={is_active(&Route::LodgingList)}>
+                        { "Lodgings" }
+                    </Link<Route>>
+                    </>
+                }} else { html!{} }}
 
-                // Inventory — Administrator, Clinician, InventoryClerk
-                { if matches!(role, UserRole::Administrator | UserRole::Clinician | UserRole::InventoryClerk) {
-                    html! {
-                        <>
-                        <div class="sidebar-section">{ "Inventory" }</div>
-                        <Link<Route> to={Route::Inventory} classes={is_active(&Route::Inventory)}>
-                            { "Stock" }
-                        </Link<Route>>
-                        <Link<Route> to={Route::InventoryTransactions} classes={is_active(&Route::InventoryTransactions)}>
-                            { "Transactions" }
-                        </Link<Route>>
-                        </>
-                    }
-                } else { html!{} }}
+                { if sections.contains(&"Inventory") { html! {
+                    <>
+                    <div class="sidebar-section">{ "Inventory" }</div>
+                    <Link<Route> to={Route::Inventory} classes={is_active(&Route::Inventory)}>
+                        { "Stock" }
+                    </Link<Route>>
+                    <Link<Route> to={Route::InventoryTransactions} classes={is_active(&Route::InventoryTransactions)}>
+                        { "Transactions" }
+                    </Link<Route>>
+                    </>
+                }} else { html!{} }}
 
-                // Import/Export — Administrator, InventoryClerk, Reviewer
-                { if matches!(role, UserRole::Administrator | UserRole::InventoryClerk | UserRole::Reviewer) {
-                    html! {
-                        <>
-                        <div class="sidebar-section">{ "Data" }</div>
-                        <Link<Route> to={Route::ImportExport} classes={is_active(&Route::ImportExport)}>
-                            { "Import / Export" }
-                        </Link<Route>>
-                        </>
-                    }
-                } else { html!{} }}
+                { if sections.contains(&"Data") { html! {
+                    <>
+                    <div class="sidebar-section">{ "Data" }</div>
+                    <Link<Route> to={Route::ImportExport} classes={is_active(&Route::ImportExport)}>
+                        { "Import / Export" }
+                    </Link<Route>>
+                    </>
+                }} else { html!{} }}
 
-                // Configuration — Administrator only
-                { if matches!(role, UserRole::Administrator) {
-                    html! {
-                        <>
-                        <div class="sidebar-section">{ "System" }</div>
-                        <Link<Route> to={Route::Configuration} classes={is_active(&Route::Configuration)}>
-                            { "Configuration" }
-                        </Link<Route>>
-                        </>
-                    }
-                } else { html!{} }}
+                { if sections.contains(&"System") { html! {
+                    <>
+                    <div class="sidebar-section">{ "System" }</div>
+                    <Link<Route> to={Route::Configuration} classes={is_active(&Route::Configuration)}>
+                        { "Configuration" }
+                    </Link<Route>>
+                    </>
+                }} else { html!{} }}
 
-                // Security Settings — all authenticated users
                 <div class="sidebar-section">{ "Account" }</div>
                 <Link<Route> to={Route::SecuritySettings} classes={is_active(&Route::SecuritySettings)}>
                     { "Security Settings" }

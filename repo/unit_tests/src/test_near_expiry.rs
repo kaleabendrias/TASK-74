@@ -1,11 +1,5 @@
 use chrono::{NaiveDate, Utc};
-
-fn is_near_expiry(expiration_date: Option<NaiveDate>) -> bool {
-    expiration_date.map_or(false, |d| {
-        let cutoff = Utc::now().date_naive() + chrono::Duration::days(30);
-        d <= cutoff
-    })
-}
+use tourism_backend::service::inventory::is_near_expiry;
 
 fn today_plus(days: i64) -> NaiveDate {
     Utc::now().date_naive() + chrono::Duration::days(days)

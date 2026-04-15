@@ -1,53 +1,54 @@
 //! Application-wide contexts: AuthProvider (user profile + CSRF token in memory)
 //! and ToastProvider (notification queue with auto-dismiss).
+//!
+//! Pure state-transition logic lives in `frontend_logic::{auth,toast}`.
+//! This module wraps those types in Yew's `Reducible` trait and handles
+//! the WASM-specific side effect: syncing the CSRF token to a thread-local
+//! so that `services::api` can inject it into every request.
 
 use std::rc::Rc;
 use yew::prelude::*;
 
-use crate::models::{UserProfile, UserRole, Toast, ToastKind};
 use crate::services::api;
 
-// ── Auth Context ──
-#[derive(Debug, Clone, PartialEq)]
-pub struct AuthState {
-    pub user: Option<UserProfile>,
-    pub csrf_token: Option<String>,
-}
+// ── Re-export action/state types from shared logic ────────────────────────────
+
+pub use frontend_logic::auth::AuthAction;
+pub use frontend_logic::toast::ToastAction;
+pub use frontend_logic::models::{UserProfile, UserRole, Toast, ToastKind};
+
+// ── Auth Context ──────────────────────────────────────────────────────────────
+
+/// Newtype wrapper so the frontend can implement the Yew `Reducible` trait
+/// (which lives in an external crate) on a locally-owned type.
+/// All field access is forwarded via `Deref` to the inner `frontend_logic` type.
+pub struct AuthState(pub frontend_logic::auth::AuthState);
 
 impl Default for AuthState {
     fn default() -> Self {
-        Self { user: None, csrf_token: None }
+        Self(frontend_logic::auth::AuthState::default())
     }
 }
 
-pub enum AuthAction {
-    SetAuth { user: UserProfile, csrf_token: String },
-    SetUser(UserProfile),
-    Logout,
+impl std::ops::Deref for AuthState {
+    type Target = frontend_logic::auth::AuthState;
+    fn deref(&self) -> &Self::Target { &self.0 }
 }
 
 impl Reducible for AuthState {
     type Action = AuthAction;
     fn reduce(self: Rc<Self>, action: Self::Action) -> Rc<Self> {
-        match action {
-            AuthAction::SetAuth { user, csrf_token } => {
-                api::set_csrf_token(Some(csrf_token.clone()));
-                Rc::new(AuthState {
-                    user: Some(user),
-                    csrf_token: Some(csrf_token),
-                })
-            }
-            AuthAction::SetUser(user) => {
-                Rc::new(AuthState {
-                    user: Some(user),
-                    csrf_token: self.csrf_token.clone(),
-                })
-            }
-            AuthAction::Logout => {
-                api::set_csrf_token(None);
-                Rc::new(AuthState::default())
-            }
+        // Side-effect: keep CSRF token in thread-local for api::* functions.
+        match &action {
+            AuthAction::SetAuth { csrf_token, .. } =>
+                api::set_csrf_token(Some(csrf_token.clone())),
+            AuthAction::Logout => api::set_csrf_token(None),
+            _ => {}
         }
+        // Pure state transition delegated to frontend_logic.
+        let inner = Rc::new(self.0.clone());
+        let new_inner = inner.reduce(action);
+        Rc::new(AuthState((*new_inner).clone()))
     }
 }
 
@@ -68,39 +69,28 @@ pub fn auth_provider(props: &AuthProviderProps) -> Html {
     }
 }
 
-// ── Toast Context ──
-#[derive(Debug, Clone, PartialEq)]
-pub struct ToastState {
-    pub toasts: Vec<Toast>,
-    pub next_id: u32,
-}
+// ── Toast Context ─────────────────────────────────────────────────────────────
+
+/// Newtype wrapper for `Reducible` — same pattern as `AuthState`.
+pub struct ToastState(pub frontend_logic::toast::ToastState);
 
 impl Default for ToastState {
     fn default() -> Self {
-        Self { toasts: vec![], next_id: 1 }
+        Self(frontend_logic::toast::ToastState::default())
     }
 }
 
-pub enum ToastAction {
-    Add(ToastKind, String),
-    Remove(u32),
+impl std::ops::Deref for ToastState {
+    type Target = frontend_logic::toast::ToastState;
+    fn deref(&self) -> &Self::Target { &self.0 }
 }
 
 impl Reducible for ToastState {
     type Action = ToastAction;
     fn reduce(self: Rc<Self>, action: Self::Action) -> Rc<Self> {
-        let mut toasts = self.toasts.clone();
-        let mut next_id = self.next_id;
-        match action {
-            ToastAction::Add(kind, message) => {
-                toasts.push(Toast { id: next_id, kind, message });
-                next_id += 1;
-            }
-            ToastAction::Remove(id) => {
-                toasts.retain(|t| t.id != id);
-            }
-        }
-        Rc::new(ToastState { toasts, next_id })
+        let inner = Rc::new(self.0.clone());
+        let new_inner = inner.reduce(action);
+        Rc::new(ToastState((*new_inner).clone()))
     }
 }
 
