@@ -485,6 +485,39 @@ async fn import_job_ownership_enforced() {
         "Non-owner should not access import job details");
 }
 
+/// Verify that a standard TLS client (no cert bypass) rejects the backend's
+/// self-signed certificate. This proves:
+///   (a) The backend is actually running TLS, not plain HTTP.
+///   (b) The `danger_accept_invalid_certs(true)` used elsewhere is load-bearing —
+///       removing it would break connectivity, which means TLS is actively enforced.
+#[tokio::test]
+async fn strict_tls_client_rejects_self_signed_cert() {
+    let pool = setup_pool();
+    let _seed = seed_users(&pool);
+
+    // Build a client that uses the OS certificate store — no bypass.
+    let strict = reqwest::Client::builder()
+        .build()
+        .expect("strict client build failed");
+
+    let result = strict
+        .get(&format!("{}/api/health", base_url()))
+        .send()
+        .await;
+
+    // Must fail: the self-signed cert is not trusted by the OS CA store.
+    assert!(
+        result.is_err(),
+        "Strict TLS client must reject self-signed cert; got successful response"
+    );
+    let err = result.unwrap_err();
+    // The failure must happen at the TLS/connect layer, not at the application layer.
+    assert!(
+        err.is_connect(),
+        "Expected a TLS connect error, got: {:?}", err
+    );
+}
+
 #[tokio::test]
 async fn config_endpoint_requires_admin() {
     let pool = setup_pool();
