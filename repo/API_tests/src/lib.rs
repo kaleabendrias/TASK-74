@@ -34,3 +34,5 @@ mod test_config;
 mod test_user_management;
 #[cfg(test)]
 mod test_crud_coverage;
+#[cfg(test)]
+mod test_response_schemas;

@@ -10,6 +10,16 @@ use crate::models::UserRole;
 /// appear in the sidebar.  Matches the `matches!` guards in `sidebar.rs`.
 ///
 /// Sections: "Main", "Content", "Inventory", "Data", "System", "Account"
+/// Returns the single uppercase initial letter shown in the sidebar avatar.
+///
+/// Mirrors the expression in `frontend/src/components/sidebar.rs`:
+/// ```ignore
+/// let initial = user.username.chars().next().unwrap_or('?').to_uppercase().to_string();
+/// ```
+pub fn avatar_initial(username: &str) -> String {
+    username.chars().next().unwrap_or('?').to_uppercase().to_string()
+}
+
 pub fn visible_sections(role: &UserRole) -> Vec<&'static str> {
     let mut sections = vec!["Main", "Account"]; // always visible
     if matches!(role,

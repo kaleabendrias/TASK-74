@@ -8,6 +8,24 @@
 use std::rc::Rc;
 use crate::models::{Toast, ToastKind};
 
+/// Maps a `ToastKind` to the CSS class applied by the toast container.
+///
+/// Mirrors the class expression in `frontend/src/components/toast.rs`:
+/// ```ignore
+/// let class = match kind {
+///     ToastKind::Success => "toast-success",
+///     ToastKind::Error   => "toast-error",
+///     ToastKind::Info    => "toast-info",
+/// };
+/// ```
+pub fn css_class(kind: &ToastKind) -> &'static str {
+    match kind {
+        ToastKind::Success => "toast-success",
+        ToastKind::Error   => "toast-error",
+        ToastKind::Info    => "toast-info",
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ToastState {
     pub toasts: Vec<Toast>,

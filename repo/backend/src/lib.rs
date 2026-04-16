@@ -43,19 +43,11 @@ pub fn build_pool(database_url: &str, max_connections: u32) -> DbPool {
         .expect("Failed to create database connection pool")
 }
 
-/// Seeds default users and a facility if the users table is empty.
-/// Called once at startup to ensure the portal is usable out of the box.
+/// Seeds default users and a facility, always restoring the expected
+/// per-user passwords so that E2E tests work even after API test runs
+/// that replace the password hashes with a test-only value.
 pub fn seed_defaults(pool: &DbPool) {
     let mut conn = pool.get().expect("Failed to get DB connection for seeding");
-
-    let count: i64 = schema::users::table
-        .count()
-        .get_result(&mut conn)
-        .unwrap_or(0);
-
-    if count > 0 {
-        return;
-    }
 
     tracing::info!("Seeding default facility and users...");
 
@@ -77,7 +69,6 @@ pub fn seed_defaults(pool: &DbPool) {
          ON CONFLICT DO NOTHING"
     ).execute(&mut conn).ok();
 
-    // Each seeded account has its own fixed password for reliable tester login.
     let users: &[(&str, &str, &str, Option<&str>)] = &[
         ("admin",     "Admin@2024",     "Administrator", None),
         ("publisher", "Pub@2024",       "Publisher",     None),
@@ -94,7 +85,7 @@ pub fn seed_defaults(pool: &DbPool) {
         let q = format!(
             "INSERT INTO users (id, username, password_hash, role, facility_id, mfa_enabled) \
              VALUES (gen_random_uuid(), '{}', '{}', '{}', {}, false) \
-             ON CONFLICT (username) DO NOTHING",
+             ON CONFLICT (username) DO UPDATE SET password_hash = EXCLUDED.password_hash",
             username,
             hash.replace('\'', "''"),
             role,

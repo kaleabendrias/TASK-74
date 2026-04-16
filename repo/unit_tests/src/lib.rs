@@ -32,3 +32,5 @@ mod test_tz_scheduling;
 mod test_export_watermark;
 #[cfg(test)]
 mod test_import_resumable;
+#[cfg(test)]
+mod test_rbac_permissions;

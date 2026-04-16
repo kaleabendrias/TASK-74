@@ -18,3 +18,4 @@ pub mod sidebar;
 pub mod routing;
 pub mod validation;
 pub mod mask;
+pub mod app_shell;

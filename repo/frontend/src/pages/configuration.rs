@@ -63,11 +63,13 @@ pub fn configuration_page() -> Html {
         let confirm_modal = confirm_modal.clone();
         let config_rows = config_rows.clone();
         Callback::from(move |key: String| {
-            let current = (*config_rows).iter()
+            let current_val = (*config_rows).iter()
                 .find(|r| r["key"].as_str() == Some(&key))
-                .and_then(|r| r["feature_switch"].as_bool())
+                .and_then(|r| r["value"].as_str())
+                .map(|v| v == "true")
                 .unwrap_or(false);
-            confirm_modal.set(Some((key, (!current).to_string(), !current)));
+            // Keep feature_switch=true so the row stays in the Feature Switches section.
+            confirm_modal.set(Some((key, (!current_val).to_string(), true)));
         })
     };
 

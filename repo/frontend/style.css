@@ -684,7 +684,7 @@ tbody tr.expired { background: var(--color-error-light); }
    ============================================================ */
 .toast-container {
     position: fixed;
-    top: var(--sp-4);
+    bottom: var(--sp-4);
     right: var(--sp-4);
     z-index: 9999;
     display: flex;
@@ -727,6 +727,7 @@ tbody tr.expired { background: var(--color-error-light); }
    Upload / Drag-drop area
    ============================================================ */
 .upload-area {
+    position: relative;
     border: 2px dashed var(--color-border);
     border-radius: var(--radius-lg);
     padding: var(--sp-8) var(--sp-6);

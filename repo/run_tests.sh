@@ -25,13 +25,24 @@ RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC
 cleanup() {
     echo -e "\n${CYAN}[teardown]${NC} Stopping and removing containers..."
     docker compose -f "$COMPOSE_FILE" down -v --remove-orphans 2>/dev/null || true
+    _proj="${COMPOSE_PROJECT_NAME:-$(basename "$(pwd)")}"
+    docker ps -a --filter "label=com.docker.compose.project=${_proj}" -q \
+        | xargs -r docker rm -f 2>/dev/null || true
 }
 trap cleanup EXIT
 
 # Remove any leftover state from a previously interrupted run so volumes
 # (especially pgdata) start fresh and don't carry stale credentials.
+# We also force-remove ALL containers carrying the compose project label so
+# that orphan containers from a previous compose file (e.g. repo-postgres-1)
+# cannot hold ports (like 5433) that this stack needs.
 echo -e "${CYAN}[pre-run]${NC} Removing any leftover containers and volumes..."
 docker compose -f "$COMPOSE_FILE" down -v --remove-orphans 2>/dev/null || true
+COMPOSE_PROJECT="${COMPOSE_PROJECT_NAME:-$(basename "$(pwd)")}"
+docker ps -a --filter "label=com.docker.compose.project=${COMPOSE_PROJECT}" -q \
+    | xargs -r docker rm -f 2>/dev/null || true
+docker volume ls --filter "label=com.docker.compose.project=${COMPOSE_PROJECT}" -q \
+    | xargs -r docker volume rm 2>/dev/null || true
 
 mkdir -p "$COVERAGE_DIR"
 
@@ -41,11 +52,11 @@ echo -e "${CYAN}============================================================${NC
 
 # ── 1. Build ──────────────────────────────────────────────────
 echo -e "\n${YELLOW}[1/6]${NC} Building services..."
-docker compose -f "$COMPOSE_FILE" build backend
-docker compose -f "$COMPOSE_FILE" --profile test build test-runner
+docker compose -f "$COMPOSE_FILE" build --no-cache backend
+docker compose -f "$COMPOSE_FILE" --profile test build --no-cache test-runner
 if [ "$RUN_E2E" = "true" ]; then
-    docker compose -f "$COMPOSE_FILE" build frontend
-    docker compose -f "$COMPOSE_FILE" --profile e2e build test-e2e
+    docker compose -f "$COMPOSE_FILE" build --no-cache frontend
+    docker compose -f "$COMPOSE_FILE" --profile e2e build --no-cache test-e2e
 fi
 
 # ── 2. Start database + backend ────────────────────────────────
@@ -169,18 +180,34 @@ echo -e "\n${YELLOW}[4/6]${NC} Measuring code coverage..."
 TARPAULIN_EXIT=0
 docker compose -f "$COMPOSE_FILE" --profile test run --rm test-runner bash -c '
     echo "Running tarpaulin across pure-Rust packages..."
+    # Wait for the "db" hostname to be resolvable before starting Tarpaulin.
+    # A freshly-started "docker compose run" container may hit a brief window
+    # where Docker'\''s embedded DNS has not yet propagated the db service entry,
+    # causing the 4 DB-dependent tests in unit_tests to fail with
+    # "Temporary failure in name resolution".
+    echo "  Waiting for DB DNS to be ready..."
+    until getent hosts db >/dev/null 2>&1; do sleep 1; done
+    echo "  DB DNS ready."
     # Measures line coverage for all instrumentable packages:
     #   frontend_logic  — shared domain logic (validation, routing, masking, etc.)
     #   frontend_tests  — exercises frontend_logic via the test suite
     #   unit_tests      — exercises backend domain logic (crypto, state machines, import, etc.)
     # API integration tests (reqwest against live server) are not instrumentable
     # with ptrace-based ptrace coverage; their 100% pass rate validates those paths.
+    # Wait for postgres to accept TCP connections before running DB-dependent tests.
+    # getent confirms DNS resolves; /dev/tcp confirms the port is open (bash built-in,
+    # no external tools needed).  Both checks avoid "Temporary failure in name
+    # resolution" when Tarpaulin'\''s test threads race to connect simultaneously.
+    echo "  Waiting for DB TCP port to be reachable..."
+    until getent hosts db >/dev/null 2>&1 && bash -c "echo >/dev/tcp/db/5432" 2>/dev/null; do sleep 1; done
+    echo "  DB TCP reachable."
     cargo tarpaulin \
         --packages frontend_logic frontend_tests unit_tests \
         --exclude-files "backend/src/**" \
         --out Stdout \
         --skip-clean \
         --timeout 300 \
+        -- --test-threads=1 \
         2>&1 | tee /coverage/tarpaulin.log
     echo "Tarpaulin done."
 ' 2>&1 | tee "$COVERAGE_DIR/coverage_full.log" || TARPAULIN_EXIT=$?
@@ -249,16 +276,51 @@ FT_COV=$(pkg_cov "$TARP_LOG" "frontend_tests")
 E2E_EXIT=0
 E2E_LABEL="(skipped — use without --no-e2e)"
 if [ "$RUN_E2E" = "true" ]; then
-    echo -e "  Starting frontend..."
-    docker compose -f "$COMPOSE_FILE" up -d frontend
-    RETRIES=60
-    until curl -sf http://localhost:8081/ > /dev/null 2>&1; do
-        RETRIES=$((RETRIES-1)); [ "$RETRIES" -gt 0 ] || { echo -e "${YELLOW}WARNING: Frontend not ready${NC}"; break; }
-        sleep 2
-    done
-    docker compose -f "$COMPOSE_FILE" --profile e2e run --rm test-e2e \
-        2>&1 | tee "$COVERAGE_DIR/e2e.log" || E2E_EXIT=$?
-    [ "$E2E_EXIT" -eq 0 ] && E2E_LABEL="PASS" || E2E_LABEL="FAIL (see $COVERAGE_DIR/e2e.log)"
+    # ── Restore E2E credentials ─────────────────────────────────
+    # API tests call seed_users() which replaces every user's password hash with
+    # 'testpassword'.  seed_defaults() now uses ON CONFLICT DO UPDATE, so a simple
+    # backend restart is enough: seed_defaults() runs on every startup and resets
+    # all password hashes back to the E2E values (Admin@2024, Pub@2024, …).
+    echo -e "  Restoring E2E credentials via backend restart..."
+    docker compose -f "$COMPOSE_FILE" restart backend
+    sleep 3
+
+    echo -e "  Waiting for backend healthy status..."
+    docker compose -f "$COMPOSE_FILE" up -d --wait --wait-timeout 120 backend \
+        || { echo -e "${RED}ERROR: Backend did not become healthy before E2E.${NC}"; E2E_EXIT=1; }
+
+    # Verify admin login works before kicking off E2E tests.
+    if [ "$E2E_EXIT" -eq 0 ]; then
+        RETRIES=10
+        until curl -ks -X POST https://localhost:8088/api/auth/login \
+            -H 'Content-Type: application/json' \
+            -d '{"username":"admin","password":"Admin@2024"}' \
+            | grep -q '"csrf_token"'; do
+            RETRIES=$((RETRIES-1))
+            if [ "$RETRIES" -le 0 ]; then
+                echo -e "${RED}ERROR: Admin login failed after credential restore — E2E would fail.${NC}"
+                E2E_EXIT=1
+                break
+            fi
+            echo "  ... waiting for credential restore ($RETRIES retries left)"
+            sleep 3
+        done
+        [ "$E2E_EXIT" -eq 0 ] && echo -e "  ${GREEN}Admin login verified — E2E credentials restored.${NC}"
+    fi
+
+    if [ "$E2E_EXIT" -eq 0 ]; then
+        echo -e "  Starting frontend and waiting for healthy status..."
+        docker compose -f "$COMPOSE_FILE" up -d --wait --wait-timeout 120 frontend \
+            || { echo -e "${YELLOW}WARNING: Frontend health check did not pass; proceeding anyway.${NC}"; }
+
+        if [ "$E2E_EXIT" -eq 0 ]; then
+        docker compose -f "$COMPOSE_FILE" --profile e2e run --rm test-e2e \
+            2>&1 | tee "$COVERAGE_DIR/e2e.log" || E2E_EXIT=$?
+        fi
+        [ "$E2E_EXIT" -eq 0 ] && E2E_LABEL="PASS" || E2E_LABEL="FAIL (see $COVERAGE_DIR/e2e.log)"
+    else
+        E2E_LABEL="FAIL (backend did not recover before E2E)"
+    fi
 fi
 
 # ── 6. Summary ─────────────────────────────────────────────────

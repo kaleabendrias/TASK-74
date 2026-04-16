@@ -19,3 +19,4 @@ mod test_models_serialization;
 mod test_pii_masking;
 mod test_client_validation;
 mod test_workflow_scenarios;
+mod test_component_behaviors;

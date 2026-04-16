@@ -98,6 +98,12 @@ services:
       - "8081:8081"
     depends_on:
       - backend
+    healthcheck:
+      test: ["CMD-SHELL", "curl -ksf https://localhost:8081/ || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
 
   test-runner:
     build:
@@ -128,11 +134,11 @@ services:
       dockerfile: Dockerfile
     depends_on:
       frontend:
-        condition: service_started
+        condition: service_healthy
       backend:
         condition: service_healthy
     environment:
-      E2E_BASE_URL: "http://frontend:8081"
+      E2E_BASE_URL: "https://frontend:8081"
       E2E_API_URL: "https://backend:8080"
     volumes:
       - e2e-reports:/app/playwright-report

@@ -156,6 +156,7 @@ pub fn inventory_page() -> Html {
         let facility = auth.user.as_ref().and_then(|u| u.facility_id.clone());
         let selected_warehouse = selected_warehouse.clone();
         let selected_bin = selected_bin.clone();
+        let warehouses = warehouses.clone();
         Callback::from(move |_: MouseEvent| {
             let name = (*new_item_name).clone();
             let lot_num = (*new_lot_number).clone();
@@ -163,9 +164,20 @@ pub fn inventory_page() -> Html {
             let lots = lots.clone();
             let toasts = toasts.clone();
             let show = show_create_lot.clone();
-            let fid = facility.clone().unwrap_or_default();
             let wid = (*selected_warehouse).clone();
             let bid = (*selected_bin).clone();
+            // For facility-scoped users (clerk, clinician) use their facility.
+            // For administrators (no facility_id), derive the facility from the
+            // selected warehouse so they can still create lots.
+            let fid = facility.clone().unwrap_or_default();
+            let fid = if fid.is_empty() {
+                (*warehouses).iter()
+                    .find(|w| w.id == wid)
+                    .map(|w| w.facility_id.clone())
+                    .unwrap_or_default()
+            } else {
+                fid
+            };
 
             if fid.is_empty() || wid.is_empty() || bid.is_empty() {
                 toasts.dispatch(ToastAction::Add(ToastKind::Error,
